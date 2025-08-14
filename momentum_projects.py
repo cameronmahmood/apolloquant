@@ -1,7 +1,8 @@
 # momentum_projects.py
-
 from __future__ import annotations
-import io, math
+
+import io
+import math
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -11,25 +12,21 @@ import streamlit as st
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# yfinance may not exist locally unless installed
-try:
-    import yfinance as yf
-    HAS_YF = True
-except Exception:
-    HAS_YF = False
+# These are required for both strategies. Make sure yfinance is in requirements.txt.
+import yfinance as yf
 
 
-# ============================================================
-# Simple SMA demo (placeholder)
-# ============================================================
+# =========================
+#  Simple SMA demo (stub)
+# =========================
 def run_sma():
     st.subheader("\U0001F4C8 Time-Series Momentum with SMA Crossover")
     st.write("Tests whether short-term trends in price predict future returns using SMA crossovers.")
-    # You can add a chart or code sample here
+    # Add a chart or sample here if you like
 
 
 # ============================================================
-# Cross-Sectional Momentum (with stocks + commodities UI)
+#  Cross-Sectional Momentum (stocks + commodities selector)
 # ============================================================
 def run_cross_sectional():
     st.subheader("\U0001F501 Cross-Sectional Momentum Across Sectors")
@@ -51,10 +48,10 @@ def run_cross_sectional():
     ]
     COMMODITIES = {
         "📊 Broad Commodity Indexes": ["DBC", "PDBC", "COMT", "BCI"],
-        "⚡ Energy": ["USO", "BNO", "UNG", "UGA", "XLE"],   # XLE = equities proxy
+        "⚡ Energy": ["USO", "BNO", "UNG", "UGA", "XLE"],  # XLE = equities proxy
         "🥇 Metals — Precious": ["GLD", "SLV", "PLTM", "PALL"],
         "🔩 Metals — Industrial": ["CPER", "JJN", "SLX"],
-        "⛏️ Miners": ["SGDM"],  # (or SGDJ)
+        "⛏️ Miners": ["SGDM"],  # or SGDJ
         "🌾 Agriculture": ["CORN", "SOYB", "WEAT", "JO", "NIB", "CANE"],
         "🐄 Livestock": ["COW"],
         "🚀 Thematic / Special Commodities": ["URA", "LIT", "KRBN"],
@@ -62,7 +59,7 @@ def run_cross_sectional():
 
     st.markdown("### Universe Selection")
 
-    # ---- Stocks block ----
+    # ---- Stocks ----
     with st.expander("Stocks (separate from commodities)", expanded=True):
         sel_all_stocks = st.checkbox("Select **all stocks**", key="all_stocks", value=False)
         default_stocks = STOCKS if sel_all_stocks else ["AAPL", "MSFT", "NVDA"]
@@ -70,13 +67,13 @@ def run_cross_sectional():
             "Choose stocks", options=STOCKS, default=default_stocks, key="stocks_multiselect"
         )
 
-    # ---- Commodities block ----
+    # ---- Commodities ----
     with st.expander("Commodities (grouped by section)", expanded=True):
         sel_all_comms = st.checkbox("Select **ALL commodities** (every section)", key="all_comms", value=False)
 
         selected_commodities: list[str] = []
         if sel_all_comms:
-            for _section, tickers in COMMODITIES.items():
+            for _sec, tickers in COMMODITIES.items():
                 selected_commodities.extend(tickers)
         else:
             for section_name, tickers in COMMODITIES.items():
@@ -89,9 +86,8 @@ def run_cross_sectional():
                     )
                     selected_commodities.extend(chosen)
 
-    # Final combined universe (unique & order-preserving)
+    # Final universe (unique, order-preserving)
     main_tickers = list(dict.fromkeys(selected_stocks + selected_commodities))
-
     if not main_tickers:
         st.info("No tickers selected — defaulting to ['AAPL','MSFT','NVDA','GLD','DBC'].")
         main_tickers = ["AAPL", "MSFT", "NVDA", "GLD", "DBC"]
@@ -218,28 +214,30 @@ def run_cross_sectional():
     st.pyplot(fig)
 
     st.subheader("\U0001F4C9 Rolling 12-Month Sharpe Ratio")
-    rolling_sharpe = ((returns.rolling(window=12).mean() - risk_free_rate) / returns.rolling(window=12).std()) * np.sqrt(12)
+    rolling_sharpe = ((returns.rolling(window=12).mean() - risk_free_rate) /
+                      returns.rolling(window=12).std()) * np.sqrt(12)
     st.line_chart(rolling_sharpe)
 
 
 # ============================================================
-# Dual Momentum (embedded app)
+#  Dual Momentum (helpers + UI in the expander body)
 # ============================================================
-
-def _fmt_pct(x):  # small helpers for the dual-momentum UI
+def _fmt_pct(x):
     return "—" if x is None or (isinstance(x, float) and pd.isna(x)) else f"{x*100:.2f}%"
 
 def _fmt_num(x):
     return "—" if x is None or (isinstance(x, float) and pd.isna(x)) else f"{x:,.2f}"
 
 def _ensure_month_end_index(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy(); df.index = pd.to_datetime(df.index); return df.resample("M").last()
+    df = df.copy()
+    df.index = pd.to_datetime(df.index)
+    return df.resample("M").last()
 
 def _parse_csv(file) -> pd.DataFrame:
     df = pd.read_csv(file)
     df.rename(columns={c: c.upper().strip() for c in df.columns}, inplace=True)
-    need = ["DATE", "US", "INTL", "CASH"]
-    if not all(c in df.columns for c in need):
+    expected = ["DATE", "US", "INTL", "CASH"]
+    if not all(c in df.columns for c in expected):
         raise ValueError("CSV must include columns: Date, US, INTL, CASH (TBILL optional)")
     df["DATE"] = pd.to_datetime(df["DATE"])
     df.set_index("DATE", inplace=True)
@@ -259,19 +257,18 @@ def _gen_demo_data(start="2010-01-31", periods=180, seed=42) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def _fetch_monthly_from_yf(tickers: dict[str, str], start="2005-01-01") -> pd.DataFrame:
-    if not HAS_YF:
-        raise RuntimeError("yfinance not installed. Add it to requirements.txt")
     data = {col: yf.download(tkr, start=start, progress=False)["Adj Close"].rename(col)
             for col, tkr in tickers.items()}
     df = pd.concat(data.values(), axis=1)
     df.columns = list(data.keys())
     df = _ensure_month_end_index(df)
-    df = df / df.iloc[0] * 100.0  # normalize to index level 100
+    df = df / df.iloc[0] * 100.0  # normalize to index 100
     return df.dropna(how="any")
 
 def _lb_ret(series: pd.Series, i: int, L: int):
-    if i - L < 0: return None
-    return series.iat[i] / series.iat[i - 1] - 1.0 if L == 1 else series.iat[i] / series.iat[i - L] - 1.0
+    if i - L < 0:
+        return None
+    return series.iat[i] / series.iat[i - L] - 1.0
 
 @dataclass
 class _BTResults:
@@ -342,7 +339,7 @@ def _backtest_dual(levels: pd.DataFrame, lookback: int = 12, abs_mode: str = "ZE
         sharpe = ann_ret / ann_vol if ann_vol > 0 else np.nan
         downside = rets[rets < 0]
         dstd = downside.std(ddof=1) if len(downside) else np.nan
-        sortino = ((1 + avg) ** 12 - 1) / (dstd * np.sqrt(12)) if dstd and dstd > 0 else np.nan
+        sortino = ((1 + avg) ** 12 - 1) / (dstd * np.sqrt(12)) if (isinstance(dstd, float) and dstd > 0) else np.nan
         maxdd = dd.min()
         calmar = ann_ret / abs(maxdd) if (maxdd is not None and maxdd < 0) else np.nan
         winrate = (rets > 0).mean()
@@ -358,40 +355,53 @@ def _backtest_dual(levels: pd.DataFrame, lookback: int = 12, abs_mode: str = "ZE
                  "MaxDD": maxdd, "Calmar": calmar, "WinRate": winrate, "Samples": len(rets)},
     )
 
+
 def run_dual_momentum():
     st.subheader("\U0001F9EE Dual Momentum Strategy")
     st.write("Combines time-series and cross-sectional filters to build a robust long-only ETF strategy.")
 
-    with st.sidebar:
-        st.header("Dual Momentum Inputs")
+    # === Inputs in-body (NOT sidebar) ===
+    st.markdown("### Inputs")
+    c0, c1, c2 = st.columns([1, 1, 1])
+    with c0:
         lookback = st.selectbox("Lookback (months)", [3, 6, 9, 10, 11, 12, 18], index=4, key="dm_lookback")
-        abs_mode = st.selectbox("Absolute Momentum Filter", ["ZERO", "TBILL"], index=0, key="dm_absmode",
-                                help="0% threshold or T-Bill lookback if TBILL column present")
-        st.subheader("Data Source")
-        src = st.radio("Choose data", ["Upload CSV", "Demo (synthetic)", "Fetch with yfinance"], index=1, key="dm_src")
+    with c1:
+        abs_mode = st.selectbox(
+            "Absolute Momentum Filter",
+            ["ZERO", "TBILL"],
+            index=0,
+            key="dm_absmode",
+            help="0% threshold or T-Bill lookback if TBILL column present",
+        )
+    with c2:
+        src = st.radio(
+            "Data Source",
+            ["Upload CSV", "Demo (synthetic)", "Fetch with yfinance"],
+            index=1,
+            key="dm_src",
+            horizontal=True,
+        )
 
-        uploaded = None
-        yf_block = None
-        if src == "Upload CSV":
-            uploaded = st.file_uploader("Upload monthly CSV", type=["csv"], key="dm_csv",
-                                        help="Columns: Date, US, INTL, CASH, (TBILL optional)")
-        elif src == "Fetch with yfinance":
-            if not HAS_YF:
-                st.warning("yfinance not available. Add it to requirements.txt")
-            else:
-                st.markdown("**Example tickers** (change as desired):")
-                c1, c2 = st.columns(2)
-                with c1:
-                    us_tkr = st.text_input("US (e.g., SPY)", value="SPY", key="dm_us")
-                    cash_tkr = st.text_input("Cash/Bonds (e.g., IEF/SHY)", value="IEF", key="dm_cash")
-                with c2:
-                    intl_tkr = st.text_input("INTL (e.g., ACWX/EFA)", value="ACWX", key="dm_intl")
-                    tbill_tkr = st.text_input("T-Bill (e.g., BIL)", value="BIL", key="dm_tbill")
-                start = st.date_input("Start date", value=pd.Timestamp("2005-01-01"),
-                                      key="dm_start").strftime("%Y-%m-%d")
-                yf_block = (us_tkr, intl_tkr, cash_tkr, tbill_tkr, start)
+    uploaded = None
+    yf_block = None
+    if src == "Upload CSV":
+        uploaded = st.file_uploader(
+            "Upload monthly CSV", type=["csv"], key="dm_csv",
+            help="Columns: Date, US, INTL, CASH, (TBILL optional)"
+        )
+    elif src == "Fetch with yfinance":
+        st.markdown("**Example tickers** (change as desired):")
+        cA, cB = st.columns(2)
+        with cA:
+            us_tkr = st.text_input("US (e.g., SPY)", value="SPY", key="dm_us")
+            cash_tkr = st.text_input("Cash/Bonds (e.g., IEF/SHY)", value="IEF", key="dm_cash")
+        with cB:
+            intl_tkr = st.text_input("INTL (e.g., ACWX/EFA)", value="ACWX", key="dm_intl")
+            tbill_tkr = st.text_input("T-Bill (e.g., BIL)", value="BIL", key="dm_tbill")
+        start = st.date_input("Start date", value=pd.Timestamp("2005-01-01"), key="dm_start").strftime("%Y-%m-%d")
+        yf_block = (us_tkr, intl_tkr, cash_tkr, tbill_tkr, start)
 
-    # Load data
+    # === Load data ===
     if src == "Upload CSV" and uploaded is not None:
         try:
             levels = _parse_csv(uploaded)
@@ -399,7 +409,7 @@ def run_dual_momentum():
         except Exception as e:
             st.error(f"CSV parse error: {e}")
             levels = _gen_demo_data()
-    elif src == "Fetch with yfinance" and HAS_YF and yf_block is not None:
+    elif src == "Fetch with yfinance" and yf_block is not None:
         us_tkr, intl_tkr, cash_tkr, tbill_tkr, start = yf_block
         try:
             levels = _fetch_monthly_from_yf({"US": us_tkr, "INTL": intl_tkr, "CASH": cash_tkr, "TBILL": tbill_tkr}, start=start)
@@ -410,14 +420,14 @@ def run_dual_momentum():
     else:
         levels = _gen_demo_data()
 
-    # Run backtest
+    # === Backtest ===
     try:
         res = _backtest_dual(levels, lookback=lookback, abs_mode=abs_mode)
     except Exception as e:
         st.error(f"Backtest error: {e}")
         return
 
-    # Metrics
+    # === Metrics ===
     st.subheader("Performance (since first full signal)")
     c1, c2, c3, c4, c5, c6, c7, c8 = st.columns(8)
     m = res.metrics
@@ -430,7 +440,7 @@ def run_dual_momentum():
     c7.metric("Win Rate", _fmt_pct(m.get("WinRate")))
     c8.metric("# Months", _fmt_num(m.get("Samples")))
 
-    # Charts
+    # === Charts ===
     st.subheader("Equity Curve & Drawdown")
     colA, colB = st.columns(2)
     with colA:
@@ -443,21 +453,31 @@ def run_dual_momentum():
     st.subheader("Allocation Timeline (weights)")
     st.area_chart(res.weights.fillna(0.0))
 
-    # Trades
+    # === Trades ===
     st.subheader("Trade Log")
     if not res.trades.empty:
         st.dataframe(res.trades, use_container_width=True)
     else:
         st.info("No switches yet (insufficient history for selected lookback or constant allocation).")
 
-    # Downloads
+    # === Downloads ===
     st.subheader("Export Results")
     exp1 = pd.concat([res.equity.rename("Equity"), res.drawdown.rename("Drawdown"), res.weights], axis=1)
-    buf1 = io.StringIO(); exp1.to_csv(buf1, index_label="Date")
-    st.download_button("⬇️ Download Equity/Drawdown/Weights (CSV)", buf1.getvalue(),
-                       file_name="dual_momentum_results.csv", mime="text/csv")
+    buf1 = io.StringIO()
+    exp1.to_csv(buf1, index_label="Date")
+    st.download_button(
+        "⬇️ Download Equity/Drawdown/Weights (CSV)",
+        buf1.getvalue(),
+        file_name="dual_momentum_results.csv",
+        mime="text/csv",
+    )
 
     if not res.trades.empty:
-        buf2 = io.StringIO(); res.trades.to_csv(buf2, index=True)
-        st.download_button("⬇️ Download Trades (CSV)", buf2.getvalue(),
-                           file_name="dual_momentum_trades.csv", mime="text/csv")
+        buf2 = io.StringIO()
+        res.trades.to_csv(buf2, index=True)
+        st.download_button(
+            "⬇️ Download Trades (CSV)",
+            buf2.getvalue(),
+            file_name="dual_momentum_trades.csv",
+            mime="text/csv",
+        )
