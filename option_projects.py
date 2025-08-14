@@ -12,7 +12,28 @@ from scipy.stats import norm
 from scipy.optimize import brentq
 
 # =========================
-# Existing: Black–Scholes
+# Core Black–Scholes pricing (define first to avoid NameError)
+# =========================
+
+def bs_price_european(S, K, T, r, sigma, option_type="call"):
+    """European option price via Black–Scholes."""
+    if T <= 0 or sigma <= 0:
+        # immediate expiry / zero vol fallback: intrinsic value
+        return max(0.0, (S - K) if option_type == "call" else (K - S))
+    d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+    d2 = d1 - sigma * np.sqrt(T)
+    if option_type == "call":
+        return S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
+    else:
+        return K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
+
+# Backward-compatible name if other modules call black_scholes()
+def black_scholes(S, K, T, r, sigma, option_type="call"):
+    return bs_price_european(S, K, T, r, sigma, option_type)
+
+
+# =========================
+# Black–Scholes UI
 # =========================
 
 def run_black_scholes():
@@ -26,17 +47,17 @@ def run_black_scholes():
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        S = st.number_input("Asset Price (S)", value=100.0, step=1.0)
+        S = st.number_input("Asset Price (S)", value=100.0, step=1.0, min_value=0.0)
     with c2:
-        K = st.number_input("Strike Price (K)", value=100.0, step=1.0)
+        K = st.number_input("Strike Price (K)", value=100.0, step=1.0, min_value=0.0)
     with c3:
-        T = st.number_input("Time to Maturity (years)", value=1.0, step=0.1)
+        T = st.number_input("Time to Maturity (years)", value=1.0, step=0.1, min_value=0.0)
 
     c4, c5, c6 = st.columns(3)
     with c4:
         r = st.number_input("Risk-Free Rate (%)", value=2.0, step=0.1) / 100
     with c5:
-        sigma = st.number_input("Volatility (%)", value=20.0, step=0.1) / 100
+        sigma = st.number_input("Volatility (%)", value=20.0, step=0.1, min_value=0.0) / 100
     with c6:
         plot_type = st.radio(
             "Heatmap Type",
@@ -47,13 +68,13 @@ def run_black_scholes():
     st.markdown("#### 💸 Optional Trade Inputs")
     c7, c8 = st.columns(2)
     with c7:
-        call_price_paid = st.number_input("Call Purchase Price", value=0.0)
+        call_price_paid = st.number_input("Call Purchase Price", value=0.0, min_value=0.0)
     with c8:
-        put_price_paid = st.number_input("Put Purchase Price", value=0.0)
+        put_price_paid = st.number_input("Put Purchase Price", value=0.0, min_value=0.0)
 
     # ---- Pricing ----
-    call_price = black_scholes(S, K, T, r, sigma, "call")
-    put_price = black_scholes(S, K, T, r, sigma, "put")
+    call_price = bs_price_european(S, K, T, r, sigma, "call")
+    put_price  = bs_price_european(S, K, T, r, sigma, "put")
 
     st.markdown(
         f"""
@@ -74,15 +95,15 @@ def run_black_scholes():
 
     # ---- Heatmap ----
     st.subheader("📊 Heatmap Visualization")
-    S_range = np.linspace(S * 0.8, S * 1.2, 30)
-    sigma_range = np.linspace(sigma * 0.5, sigma * 1.5, 30)
+    S_range = np.linspace(max(1e-9, S * 0.8), S * 1.2, 30)
+    sigma_range = np.linspace(max(1e-6, sigma * 0.5), max(1e-6, sigma * 1.5), 30)
     heatmap = np.zeros((len(S_range), len(sigma_range)))
 
     for i, s_val in enumerate(S_range):
         for j, sig_val in enumerate(sigma_range):
-            price = black_scholes(s_val, K, T, r, sig_val, "call")
+            price = bs_price_european(s_val, K, T, r, sig_val, "call")
             heatmap[i, j] = (
-                price - call_price_paid if plot_type == "Call P&L" and call_price_paid > 0 else price
+                price - call_price_paid if (plot_type == "Call P&L" and call_price_paid > 0) else price
             )
 
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -90,7 +111,7 @@ def run_black_scholes():
         heatmap,
         xticklabels=np.round(sigma_range, 2),
         yticklabels=np.round(S_range, 2),
-        cmap="RdYlGn" if plot_type == "Call P&L" and call_price_paid > 0 else "YlGnBu",
+        cmap="RdYlGn" if (plot_type == "Call P&L" and call_price_paid > 0) else "YlGnBu",
         ax=ax,
     )
     plt.xlabel("Volatility")
@@ -99,9 +120,8 @@ def run_black_scholes():
     st.pyplot(fig)
 
 
-
 # =========================
-# Existing: Monte Carlo placeholder
+# Monte Carlo placeholder
 # =========================
 
 def run_monte_carlo():
@@ -110,7 +130,7 @@ def run_monte_carlo():
 
 
 # =========================
-# NEW: Market-Implied Move (ATM IV)
+# Market-Implied Move (ATM IV)
 # =========================
 
 _DEFAULT_TICKERS = ["USO", "TLT", "UUP", "QQQ"]
@@ -129,10 +149,9 @@ def run_implied_move():
     with col1:
         tickers_text = st.text_input("Tickers (comma-separated)", value=",".join(_DEFAULT_TICKERS))
     with col2:
-        refresh = st.button("Refresh")
+        st.button("Refresh")  # triggers rerun
 
     tickers = [t.strip().upper() for t in tickers_text.split(",") if t.strip()]
-
     if not tickers:
         st.warning("Please enter at least one ticker.")
         return
@@ -147,9 +166,11 @@ def run_implied_move():
     )
     st.caption(f"Last updated (UTC): {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# Backward-compatible alias if main app calls this name
+
 def run_implied_move_table():
+    """Backward-compatible alias."""
     run_implied_move()
+
 
 # ---------- Helpers (implied move) ----------
 
