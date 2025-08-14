@@ -2,7 +2,7 @@ import streamlit as st
 import momentum_projects as mp
 import option_projects as op
 
-st.set_page_config(layout="wide")
+st.set_page_config(page_title="Quant Finance Projects", layout="wide")
 st.title("📊 Quantitative Finance Projects")
 
 # Sidebar navigation
@@ -15,14 +15,22 @@ if page == "Home":
 
 elif page == "About":
     st.header("ℹ️ About")
-    st.write("Created by Cameron Mahmood and Joseph Panaro. This dashboard includes option pricing, momentum strategies, portfolio optimization, and machine learning applications in finance.")
+    st.write(
+        "Created by Cameron Mahmood and Joseph Panaro. "
+        "This dashboard includes option pricing, momentum strategies, portfolio optimization, "
+        "and machine learning applications in finance."
+    )
 
 elif page == "Projects":
     st.header("💼 Quant Finance Projects")
-    project = st.selectbox("Choose a project:", [
-        "Momentum Strategies",
-        "Option Pricing & Derivatives"
-    ])
+    project = st.selectbox(
+        "Choose a project:",
+        [
+            "Momentum Strategies",
+            "Option Pricing & Derivatives",
+        ],
+        index=0
+    )
 
     if project == "Momentum Strategies":
         st.markdown("## 💡 Momentum Strategies")
@@ -41,3 +49,15 @@ elif page == "Projects":
 
         with st.expander("🎲 Monte Carlo Simulation for Option Pricing", expanded=False):
             op.run_monte_carlo()
+
+        # NEW: Market-Implied Move tool (ATM IV -> expected 1W/1M move)
+        with st.expander("📈 Market-Implied Move (from ATM IV)", expanded=True):
+            if hasattr(op, "run_implied_move"):
+                op.run_implied_move()
+            elif hasattr(op, "run_implied_move_table"):
+                op.run_implied_move_table()
+            else:
+                st.warning(
+                    "Add `run_implied_move()` (or `run_implied_move_table()`) "
+                    "to `option_projects.py` to render the implied move table."
+                )
