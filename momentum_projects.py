@@ -222,79 +222,66 @@ def run_dual_momentum():
     st.subheader("\U0001F9EE Dual Momentum Strategy")
     st.write("Combines time-series and cross-sectional filters to build a robust long-only ETF strategy.")
     # Add your logic or visuals
-# Dual Momentum — Streamlit App (Resume-Ready)
-# -------------------------------------------------
-# Features
-# - Relative (cross-sectional) and absolute (time-series) momentum
-# - Monthly rebalancing among US, INTL, or Cash/Bonds
-# - Upload CSV or fetch example tickers with yfinance (SPY, ACWX/EFA, SHY/IEF, BIL)
-# - Interactive controls, charts, metrics, trade log
-# - One-click CSV exports (equity curve & trades)
-# - Clean structure for recruiters to scan
-#
-# CSV format (header required):
-#   Date,US,INTL,CASH,TBILL
-#   2015-01-31,205.43,51.23,84.91,100.11
-# ... (monthly index levels, adjusted close or total return index)
+"""
+Modular Dual Momentum component for Streamlit multi-page apps.
+- No st.set_page_config here (keep it in your main app).
+- Import `render_dual_momentum` and call it from your Projects page (inside an expander/section).
+
+Usage in momentum_projects.py (example):
+    from dual_momentum import render_dual_momentum
+    with st.expander("📊 Dual Momentum Strategy", expanded=False):
+        render_dual_momentum()
+"""
 
 import io
 import math
+from dataclasses import dataclass
+
 import numpy as np
 import pandas as pd
 import streamlit as st
-from dataclasses import dataclass
 
+# Optional yfinance
 try:
     import yfinance as yf
     HAS_YF = True
-except Exception:
+except Exception:  # pragma: no cover
     HAS_YF = False
 
-# -------------------- Page Config --------------------
-st.set_page_config(
-    page_title="Dual Momentum Strategy",
-    page_icon="📈",
-    layout="wide",
-)
-
 # -------------------- Helpers --------------------
-def fmt_pct(x: float | None) -> str:
+def _fmt_pct(x: float | None) -> str:
     if x is None or pd.isna(x):
         return "—"
     return f"{x*100:.2f}%"
 
 
-def fmt_num(x: float | None) -> str:
+def _fmt_num(x: float | None) -> str:
     if x is None or pd.isna(x):
         return "—"
     return f"{x:,.2f}"
 
 
-def ensure_month_end_index(df: pd.DataFrame) -> pd.DataFrame:
+def _ensure_month_end_index(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.index = pd.to_datetime(df.index)
-    # If not already monthly, resample to month-end using last value
-    if df.index.inferred_type not in ("datetime64", "datetime64tz"):
-        raise ValueError("Date index must be datetime-like.")
     return df.resample("M").last()
 
 
-def parse_csv(file: io.BytesIO | io.StringIO) -> pd.DataFrame:
+def _parse_csv(file: io.BytesIO | io.StringIO) -> pd.DataFrame:
     df = pd.read_csv(file)
-    # Normalize headers
     cols = {c: c.upper().strip() for c in df.columns}
     df.rename(columns=cols, inplace=True)
-    expected = ["DATE", "US", "INTL", "CASH"]
-    if not all(c in df.columns for c in expected):
-        raise ValueError("CSV must include columns: Date, US, INTL, CASH (TBILL optional)")
+    need = ["DATE", "US", "INTL", "CASH"]
+    if not all(c in df.columns for c in need):
+        raise ValueError("CSV must include: Date, US, INTL, CASH (TBILL optional)")
     df["DATE"] = pd.to_datetime(df["DATE"])  # coerce
     df.set_index("DATE", inplace=True)
     df = df[[c for c in ["US", "INTL", "CASH", "TBILL"] if c in df.columns]].astype(float)
-    df = ensure_month_end_index(df)
+    df = _ensure_month_end_index(df)
     return df.sort_index()
 
 
-def gen_demo_data(start="2010-01-31", periods=180, seed=42) -> pd.DataFrame:
+def _gen_demo_data(start="2010-01-31", periods=180, seed=42) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     dates = pd.date_range(start=start, periods=periods, freq="M")
     US = [100.0]
@@ -310,27 +297,10 @@ def gen_demo_data(start="2010-01-31", periods=180, seed=42) -> pd.DataFrame:
         INTL.append(INTL[-1] * (1 + r_int))
         CASH.append(CASH[-1] * (1 + r_cash))
         TBILL.append(TBILL[-1] * (1 + r_tb))
-    df = pd.DataFrame({"US": US, "INTL": INTL, "CASH": CASH, "TBILL": TBILL}, index=dates)
-    return df
+    return pd.DataFrame({"US": US, "INTL": INTL, "CASH": CASH, "TBILL": TBILL}, index=dates)
 
 
-@st.cache_data(show_spinner=False)
-def fetch_monthly_from_yf(tickers: dict[str, str], start="2005-01-01") -> pd.DataFrame:
-    if not HAS_YF:
-        raise RuntimeError("yfinance not installed. Please add it to requirements.txt")
-    data = {}
-    for col, tkr in tickers.items():
-        s = yf.download(tkr, start=start, progress=False)["Adj Close"].rename(col)
-        data[col] = s
-    df = pd.concat(data.values(), axis=1)
-    df.columns = list(data.keys())
-    df = ensure_month_end_index(df)
-    # Normalize to index levels (start at 100)
-    df = df / df.iloc[0] * 100.0
-    return df.dropna(how="any")
-
-
-def lookback_return(series: pd.Series, i: int, L: int) -> float | None:
+def _lookback_return(series: pd.Series, i: int, L: int) -> float | None:
     if i - L < 0:
         return None
     now, then = series.iat[i], series.iat[i - L]
@@ -338,7 +308,7 @@ def lookback_return(series: pd.Series, i: int, L: int) -> float | None:
 
 
 @dataclass
-class BTResults:
+class _BTResults:
     equity: pd.Series
     drawdown: pd.Series
     weights: pd.DataFrame
@@ -346,11 +316,7 @@ class BTResults:
     metrics: dict
 
 
-def backtest_dual_momentum(levels: pd.DataFrame, lookback: int = 12, abs_mode: str = "ZERO") -> BTResults:
-    """
-    levels columns: [US, INTL, CASH, TBILL?] monthly levels (higher = better)
-    abs_mode: "ZERO" (0% threshold) or "TBILL" (T-Bill lookback)
-    """
+def _backtest_dual_momentum(levels: pd.DataFrame, lookback: int = 12, abs_mode: str = "ZERO") -> _BTResults:
     cols = [c for c in ["US", "INTL", "CASH", "TBILL"] if c in levels.columns]
     if not set(["US", "INTL", "CASH"]).issubset(cols):
         raise ValueError("levels must include US, INTL, CASH (TBILL optional)")
@@ -373,19 +339,19 @@ def backtest_dual_momentum(levels: pd.DataFrame, lookback: int = 12, abs_mode: s
             w.iloc[i] = [0.0, 0.0, 1.0]
             continue
 
-        r_us = lookback_return(df["US"], i, lookback)
-        r_int = lookback_return(df["INTL"], i, lookback)
+        r_us = _lookback_return(df["US"], i, lookback)
+        r_int = _lookback_return(df["INTL"], i, lookback)
         winner = "US" if (r_us or -1) > (r_int or -1) else "INTL"
         winner_ret = r_us if winner == "US" else r_int
 
         threshold = 0.0
         if abs_mode == "TBILL" and "TBILL" in df.columns:
-            r_tb = lookback_return(df["TBILL"], i, lookback)
+            r_tb = _lookback_return(df["TBILL"], i, lookback)
             threshold = r_tb if r_tb is not None else 0.0
 
         target = winner if (winner_ret is not None and winner_ret > threshold) else "CASH"
 
-        # Compute THIS month's simple return of target asset
+        # this month's return of the target
         if target == "US":
             mret = df["US"].iat[i] / df["US"].iat[i - 1] - 1
         elif target == "INTL":
@@ -413,7 +379,7 @@ def backtest_dual_momentum(levels: pd.DataFrame, lookback: int = 12, abs_mode: s
             })
             pos = target
 
-    # Metrics (based on monthly returns reconstructed from equity)
+    # Metrics
     eq_filled = eq.dropna()
     rets = eq_filled.pct_change().dropna()
     if len(rets) > 0:
@@ -434,7 +400,7 @@ def backtest_dual_momentum(levels: pd.DataFrame, lookback: int = 12, abs_mode: s
     else:
         ann_ret = ann_vol = sharpe = sortino = maxdd = calmar = winrate = np.nan
 
-    res = BTResults(
+    return _BTResults(
         equity=eq,
         drawdown=dd,
         weights=w,
@@ -450,154 +416,115 @@ def backtest_dual_momentum(levels: pd.DataFrame, lookback: int = 12, abs_mode: s
             "Samples": len(rets),
         },
     )
-    return res
 
 
-# -------------------- UI --------------------
-st.title("Dual Momentum Strategy")
-st.caption("Relative momentum (US vs INTL) + Absolute momentum (0% or T‑Bills). Monthly rebalancing. For education only.")
+# -------------------- Public UI Renderer --------------------
+def render_dual_momentum():
+    """Drop-in Streamlit UI to render under your existing Projects page/expander."""
+    st.markdown("### 📊 Dual Momentum Strategy")
+    st.caption("Relative momentum (US vs INTL) + absolute momentum (0% or T‑Bills). Monthly rebalancing.")
 
-with st.sidebar:
-    st.header("Inputs")
-    lookback = st.selectbox("Lookback (months)", [3, 6, 9, 10, 11, 12, 18], index=4)
-    abs_mode = st.selectbox("Absolute Momentum Filter", ["ZERO", "TBILL"], index=0, help="0% threshold or T‑Bill lookback if TBILL column present")
+    # Controls (use columns to fit in your layout)
+    c1, c2, c3 = st.columns([1, 1, 2])
+    with c1:
+        lookback = st.selectbox("Lookback (months)", [3, 6, 9, 10, 11, 12, 18], index=4, key="dm_lb")
+    with c2:
+        abs_mode = st.selectbox("Abs Filter", ["ZERO", "TBILL"], index=0, key="dm_abs")
+    with c3:
+        src = st.radio("Data", ["Upload CSV", "Demo", "yfinance"], index=0, horizontal=True, key="dm_src")
 
-    st.subheader("Data Source")
-    src = st.radio("Choose data", ["Upload CSV", "Demo (synthetic)", "Fetch with yfinance"], index=0)
-
-    uploaded = None
-    yf_block = None
-
+    # Load data
     if src == "Upload CSV":
-        uploaded = st.file_uploader("Upload monthly CSV", type=["csv"], help="Columns: Date, US, INTL, CASH, (TBILL optional)")
-    elif src == "Fetch with yfinance":
-        if not HAS_YF:
-            st.warning("yfinance not available. Add it to requirements.txt")
+        up = st.file_uploader("Monthly CSV: Date, US, INTL, CASH, (TBILL)", type=["csv"], key="dm_csv")
+        if up is not None:
+            try:
+                levels = _parse_csv(up)
+                st.success(f"Loaded {len(levels):,} rows • {levels.index.min().date()} → {levels.index.max().date()}")
+            except Exception as e:
+                st.error(f"CSV parse error: {e}")
+                levels = _gen_demo_data()
         else:
-            st.markdown("**Example tickers** (change as desired):")
-            c1, c2 = st.columns(2)
+            levels = _gen_demo_data()
+    elif src == "yfinance":
+        if not HAS_YF:
+            st.warning("yfinance not installed in this environment.")
+            levels = _gen_demo_data()
+        else:
+            c1, c2, c3, c4 = st.columns(4)
             with c1:
-                us_tkr = st.text_input("US (e.g., SPY)", value="SPY")
-                cash_tkr = st.text_input("Cash/Bonds (e.g., IEF or SHY)", value="IEF")
+                us_tkr = st.text_input("US", value="SPY", key="dm_us")
             with c2:
-                intl_tkr = st.text_input("INTL (e.g., ACWX or EFA)", value="ACWX")
-                tbill_tkr = st.text_input("T‑Bill (e.g., BIL)", value="BIL")
-            start = st.date_input("Start date", value=pd.Timestamp("2005-01-01")).strftime("%Y-%m-%d")
-            yf_block = (us_tkr, intl_tkr, cash_tkr, tbill_tkr, start)
+                intl_tkr = st.text_input("INTL", value="ACWX", key="dm_intl")
+            with c3:
+                cash_tkr = st.text_input("Cash/Bonds", value="IEF", key="dm_cash")
+            with c4:
+                tbill_tkr = st.text_input("T‑Bill", value="BIL", key="dm_tbill")
+            start = st.date_input("Start date", value=pd.Timestamp("2005-01-01"), key="dm_start").strftime("%Y-%m-%d")
+            try:
+                data = {}
+                for col, tkr in {"US": us_tkr, "INTL": intl_tkr, "CASH": cash_tkr, "TBILL": tbill_tkr}.items():
+                    s = yf.download(tkr, start=start, progress=False)["Adj Close"].rename(col)
+                    data[col] = s
+                levels = pd.concat(data.values(), axis=1)
+                levels.columns = list(data.keys())
+                levels = _ensure_month_end_index(levels)
+                levels = levels / levels.iloc[0] * 100.0
+                levels = levels.dropna(how="any")
+                st.success(f"Fetched {levels.index.min().date()} → {levels.index.max().date()}")
+            except Exception as e:
+                st.error(f"yfinance error: {e}")
+                levels = _gen_demo_data()
+    else:
+        levels = _gen_demo_data()
 
-# Load data
-if src == "Upload CSV" and uploaded is not None:
+    # Backtest
     try:
-        levels = parse_csv(uploaded)
-        st.success(f"Loaded CSV with {len(levels):,} rows from {levels.index.min().date()} to {levels.index.max().date()}")
+        res = _backtest_dual_momentum(levels, lookback=lookback, abs_mode=abs_mode)
     except Exception as e:
-        st.error(f"CSV parse error: {e}")
-        levels = gen_demo_data()
-elif src == "Fetch with yfinance" and HAS_YF and yf_block is not None:
-    us_tkr, intl_tkr, cash_tkr, tbill_tkr, start = yf_block
-    try:
-        levels = fetch_monthly_from_yf({"US": us_tkr, "INTL": intl_tkr, "CASH": cash_tkr, "TBILL": tbill_tkr}, start=start)
-        st.success(f"Fetched yfinance data from {levels.index.min().date()} to {levels.index.max().date()}")
-    except Exception as e:
-        st.error(f"yfinance error: {e}")
-        levels = gen_demo_data()
-else:
-    levels = gen_demo_data()
+        st.error(f"Backtest error: {e}")
+        return
 
-# Run backtest
-try:
-    res = backtest_dual_momentum(levels, lookback=lookback, abs_mode=abs_mode)
-except Exception as e:
-    st.error(f"Backtest error: {e}")
-    st.stop()
+    # Metrics row
+    m1, m2, m3, m4, m5, m6, m7, m8 = st.columns(8)
+    m1.metric("CAGR", _fmt_pct(res.metrics.get("CAGR")))
+    m2.metric("Ann. Vol", _fmt_pct(res.metrics.get("AnnVol")))
+    m3.metric("Sharpe", _fmt_num(res.metrics.get("Sharpe")))
+    m4.metric("Sortino", _fmt_num(res.metrics.get("Sortino")))
+    m5.metric("Max DD", _fmt_pct(res.metrics.get("MaxDD")))
+    m6.metric("Calmar", _fmt_num(res.metrics.get("Calmar")))
+    m7.metric("Win Rate", _fmt_pct(res.metrics.get("WinRate")))
+    m8.metric("# Months", _fmt_num(res.metrics.get("Samples")))
 
-# -------------------- Metrics --------------------
-st.subheader("Performance (since first full signal)")
-c1, c2, c3, c4, c5, c6, c7, c8 = st.columns(8)
-metrics = res.metrics
-c1.metric("CAGR", fmt_pct(metrics.get("CAGR")))
-c2.metric("Ann. Vol", fmt_pct(metrics.get("AnnVol")))
-c3.metric("Sharpe", fmt_num(metrics.get("Sharpe")))
-c4.metric("Sortino", fmt_num(metrics.get("Sortino")))
-c5.metric("Max Drawdown", fmt_pct(metrics.get("MaxDD")))
-c6.metric("Calmar", fmt_num(metrics.get("Calmar")))
-c7.metric("Win Rate", fmt_pct(metrics.get("WinRate")))
-c8.metric("# Months", fmt_num(metrics.get("Samples")))
+    # Charts
+    ca, cb = st.columns(2)
+    with ca:
+        st.markdown("**Equity Curve (Start=100)**")
+        st.line_chart(res.equity.dropna().rename("Equity").to_frame())
+    with cb:
+        st.markdown("**Drawdown**")
+        st.area_chart(res.drawdown.dropna().rename("Drawdown").to_frame())
 
-# -------------------- Charts --------------------
-st.subheader("Equity Curve & Drawdown")
-colA, colB = st.columns(2)
+    st.markdown("**Allocation Timeline**")
+    st.area_chart(res.weights.fillna(0.0))
 
-with colA:
-    st.markdown("**Equity Curve (Start = 100)**")
-    eq_df = res.equity.dropna().rename("Equity").to_frame()
-    st.line_chart(eq_df)
+    # Trades
+    st.markdown("**Trade Log**")
+    if not res.trades.empty:
+        st.dataframe(res.trades, use_container_width=True)
+    else:
+        st.info("No switches yet for the current lookback / data window.")
 
-with colB:
-    st.markdown("**Drawdown**")
-    dd_df = res.drawdown.dropna().rename("Drawdown").to_frame()
-    st.area_chart(dd_df)
+    # Downloads
+    exp = pd.concat([
+        res.equity.rename("Equity"),
+        res.drawdown.rename("Drawdown"),
+        res.weights
+    ], axis=1)
+    buf = io.StringIO(); exp.to_csv(buf, index_label="Date")
+    st.download_button("⬇️ Download Equity/Drawdown/Weights (CSV)", buf.getvalue(), file_name="dual_momentum_results.csv", mime="text/csv")
 
-st.subheader("Allocation Timeline (weights)")
-weights_plot = res.weights.fillna(0.0)
-st.area_chart(weights_plot)
+    if not res.trades.empty:
+        buf2 = io.StringIO(); res.trades.to_csv(buf2, index=True)
+        st.download_button("⬇️ Download Trades (CSV)", buf2.getvalue(), file_name="dual_momentum_trades.csv", mime="text/csv")
 
-# -------------------- Trades --------------------
-st.subheader("Trade Log")
-if not res.trades.empty:
-    st.dataframe(res.trades, use_container_width=True)
-else:
-    st.info("No switches yet (insufficient history for selected lookback or constant allocation).")
-
-# -------------------- Downloads --------------------
-st.subheader("Export Results")
-# Equity/weights export
-exp1 = pd.concat([
-    res.equity.rename("Equity"),
-    res.drawdown.rename("Drawdown"),
-    res.weights
-], axis=1)
-
-buf1 = io.StringIO()
-exp1.to_csv(buf1, index_label="Date")
-st.download_button(
-    label="⬇️ Download Equity/Drawdown/Weights (CSV)",
-    data=buf1.getvalue(),
-    file_name="dual_momentum_results.csv",
-    mime="text/csv",
-)
-
-# Trades export
-if not res.trades.empty:
-    buf2 = io.StringIO()
-    res.trades.to_csv(buf2, index=True)
-    st.download_button(
-        label="⬇️ Download Trades (CSV)",
-        data=buf2.getvalue(),
-        file_name="dual_momentum_trades.csv",
-        mime="text/csv",
-    )
-
-# -------------------- Methodology --------------------
-st.divider()
-st.markdown(
-    """
-### Methodology
-Each month, compute **lookback returns** for US and INTL. Allocate 100% to the asset with the higher **relative momentum**. If that asset's lookback return is ≤ the **absolute threshold** (0% or T‑Bills), allocate to **Cash/Bonds** instead. Rebalance monthly.
-
-```text
-for each month t >= L:
-  rUS  = priceUS[t] / priceUS[t-L] - 1
-  rINT = priceINT[t] / priceINT[t-L] - 1
-  winner = (rUS > rINT) ? US : INTL
-  threshold = (absMode == 'TBILL') ? (tbill[t]/tbill[t-L]-1) : 0
-  target = (winner.return > threshold) ? winner : CASH
-  equity *= 1 + return_of(target, t)
-  log trade if target != previous
-```
-
-**Tip for recruiters:** This app separates concerns cleanly (data → signals → portfolio → metrics), includes robust I/O (CSV and yfinance), and exposes risk stats (Sharpe, Sortino, MaxDD, Calmar) with reproducible logic.
-
-> Not investment advice. Backtests are hypothetical and subject to lookahead and survivorship biases if misused.
-"""
-)
+    st.caption("For education only. Backtests are hypothetical.")
