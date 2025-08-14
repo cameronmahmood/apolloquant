@@ -1,13 +1,16 @@
 # option_projects.py
 
-import streamlit as st
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+import time
 import math
 from datetime import datetime, timezone
+
+import numpy as np
+import pandas as pd
+import streamlit as st
+import matplotlib.pyplot as plt
+import seaborn as sns
 import yfinance as yf
+from yfinance.exceptions import YFRateLimitError
 from scipy.stats import norm
 from scipy.optimize import brentq
 
@@ -18,7 +21,6 @@ from scipy.optimize import brentq
 def bs_price_european(S, K, T, r, sigma, option_type="call"):
     """European option price via Black–Scholes."""
     if T <= 0 or sigma <= 0:
-        # immediate expiry / zero vol fallback: intrinsic value
         return max(0.0, (S - K) if option_type == "call" else (K - S))
     d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
@@ -31,6 +33,26 @@ def bs_price_european(S, K, T, r, sigma, option_type="call"):
 def black_scholes(S, K, T, r, sigma, option_type="call"):
     return bs_price_european(S, K, T, r, sigma, option_type)
 
+# =========================
+# Streamlit caches for Yahoo calls (reduce rate-limit hits)
+# =========================
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _cached_hist(symbol: str):
+    tk = yf.Ticker(symbol)
+    return tk.history(period="5d", auto_adjust=True)
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _cached_options_list(symbol: str):
+    tk = yf.Ticker(symbol)
+    return tk.options or []
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _cached_option_chain(symbol: str, exp: str):
+    tk = yf.Ticker(symbol)
+    chain = tk.option_chain(exp)
+    # Return plain DataFrames so cache is hashable/stable
+    return chain.calls.copy(), chain.puts.copy()
 
 # =========================
 # Black–Scholes UI
@@ -119,7 +141,6 @@ def run_black_scholes():
     plt.title(f"{plot_type} Heatmap")
     st.pyplot(fig)
 
-
 # =========================
 # Monte Carlo placeholder
 # =========================
@@ -127,7 +148,6 @@ def run_black_scholes():
 def run_monte_carlo():
     st.subheader("🎲 Monte Carlo Simulation for Option Pricing")
     st.info("This section is under construction.")
-
 
 # =========================
 # Market-Implied Move (ATM IV)
@@ -157,20 +177,22 @@ def run_implied_move():
         return
 
     with st.spinner("Fetching option chains and computing implied moves..."):
-        df = _build_implied_move_table(tickers)
+        df, notes = _build_implied_move_table(tickers)
 
     st.dataframe(df, use_container_width=True)
+
+    if notes:
+        st.info(" / ".join(notes))
+
     st.caption(
         "Notes: ATM IV column displays the ~30-day expiry IV when available (fallback to ~7-day). "
         "1W/1M moves use horizon-specific IVs and DTE. Time = DTE/365."
     )
     st.caption(f"Last updated (UTC): {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}")
 
-
 def run_implied_move_table():
     """Backward-compatible alias."""
     run_implied_move()
-
 
 # ---------- Helpers (implied move) ----------
 
@@ -218,14 +240,16 @@ def _nearest_atm_strike(strikes, spot):
     idx = np.abs(arr - spot).argmin()
     return float(arr[idx])
 
-def _get_atm_iv_for_exp(tk: yf.Ticker, spot: float, exp: str):
+def _get_atm_iv_for_exp(symbol: str, spot: float, exp: str):
     """Return (ATM IV ann, DTE calendar days) for a given expiration."""
     try:
-        chain = tk.option_chain(exp)
+        calls, puts = _cached_option_chain(symbol, exp)
+    except YFRateLimitError:
+        # Pass up a specific signal; caller will mark row
+        raise
     except Exception:
         return np.nan, 0
 
-    calls, puts = chain.calls.copy(), chain.puts.copy()
     if calls.empty or puts.empty:
         return np.nan, 0
 
@@ -279,32 +303,61 @@ def _fmt_num(x, nd=2):
 
 def _build_implied_move_table(tickers):
     rows = []
-    for ticker in tickers:
-        tk = yf.Ticker(ticker)
+    notes = []
+    rate_limited_symbols = []
 
+    for symbol in tickers:
         # Spot price (last close)
-        hist = tk.history(period="5d", auto_adjust=True)
+        try:
+            hist = _cached_hist(symbol)
+        except YFRateLimitError:
+            rate_limited_symbols.append(symbol)
+            rows.append([symbol, "", "rate-limited", "", "", "", ""])
+            continue
+        except Exception:
+            rows.append([symbol, "", "error", "", "", "", ""])
+            continue
+
         if hist.empty:
-            rows.append([ticker, "", "", "", "", "", ""])
+            rows.append([symbol, "", "", "", "", "", ""])
             continue
         spot = float(hist["Close"].iloc[-1])
 
-        expirations = tk.options
+        # Expirations list
+        try:
+            expirations = _cached_options_list(symbol)
+        except YFRateLimitError:
+            rate_limited_symbols.append(symbol)
+            rows.append([symbol, _fmt_num(spot), "rate-limited", "", "", "", ""])
+            continue
+        except Exception:
+            rows.append([symbol, _fmt_num(spot), "error", "", "", "", ""])
+            continue
+
         if not expirations:
-            rows.append([ticker, _fmt_num(spot), "", "", "", "", ""])
+            rows.append([symbol, _fmt_num(spot), "", "", "", "", ""])
             continue
 
         # Pick expiries nearest ~7d and ~30d
         exp_1w = _pick_expiration(expirations, _TARGETS["1W"])
         exp_1m = _pick_expiration(expirations, _TARGETS["1M"])
 
-        # ATM IVs + DTE
         iv_1w, dte_1w = (np.nan, 0)
         iv_1m, dte_1m = (np.nan, 0)
+
+        # Fetch chains (cached) + small delay to be gentle on API
         if exp_1w:
-            iv_1w, dte_1w = _get_atm_iv_for_exp(tk, spot, exp_1w)
+            try:
+                iv_1w, dte_1w = _get_atm_iv_for_exp(symbol, spot, exp_1w)
+                time.sleep(0.25)
+            except YFRateLimitError:
+                rate_limited_symbols.append(symbol)
         if exp_1m:
-            iv_1m, dte_1m = _get_atm_iv_for_exp(tk, spot, exp_1m)
+            try:
+                iv_1m, dte_1m = _get_atm_iv_for_exp(symbol, spot, exp_1m)
+                time.sleep(0.25)
+            except YFRateLimitError:
+                rate_limited_symbols.append(symbol)
 
         # Expected moves
         move1w_d = _expected_move_dollars(spot, iv_1w, dte_1w)
@@ -316,18 +369,27 @@ def _build_implied_move_table(tickers):
         # Display ATM IV as the ~30d IV when available (fallback to ~7d)
         atm_iv_display = iv_1m if pd.notna(iv_1m) else iv_1w
 
+        # If we were rate-limited for this symbol and got no IVs, mark it
+        atm_iv_text = "" if pd.isna(atm_iv_display) else f"{atm_iv_display:.4f}"
+        if (symbol in rate_limited_symbols) and pd.isna(atm_iv_display):
+            atm_iv_text = "rate-limited"
+
         rows.append([
-            ticker,
+            symbol,
             _fmt_num(spot, 2),
-            "" if pd.isna(atm_iv_display) else f"{atm_iv_display:.4f}",
+            atm_iv_text,
             _fmt_num(move1w_d, 2),
             _fmt_pct(move1w_pct),
             _fmt_num(move1m_d, 2),
             _fmt_pct(move1m_pct),
         ])
 
+    if rate_limited_symbols:
+        notes.append(f"Yahoo API rate-limited for: {', '.join(sorted(set(rate_limited_symbols)))}. "
+                     "Cached data will auto-refresh after ~5 minutes.")
+
     df = pd.DataFrame(
         rows,
         columns=["Ticker", "Price", "ATM IV", "1W Move ($)", "1W Move (%)", "1M Move ($)", "1M Move (%)"]
     )
-    return df
+    return df, notes
