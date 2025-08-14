@@ -2,23 +2,38 @@ import streamlit as st
 import momentum_projects as mp
 import option_projects as op
 
+CAMLINK = "https://www.linkedin.com/in/cameron-mahmood-86334628a"
+JOELINK = "https://www.linkedin.com/in/joseph-panaro-/"
+
 st.set_page_config(page_title="Quant Finance Projects", layout="wide")
 st.title("📊 Quantitative Finance Projects")
 
-# Sidebar navigation
+# Sidebar navigation (About removed)
 st.sidebar.title("🔗 Navigation")
-page = st.sidebar.radio("Go to", ["Home", "About", "Projects"])
+page = st.sidebar.radio("Go to", ["Home", "Projects"])
 
 if page == "Home":
-    st.header("🏠 Welcome to the Quantitative Finance Dashboard")
-    st.write("This app showcases multiple quantitative finance projects built in Python. Use the sidebar to navigate.")
-
-elif page == "About":
-    st.header("ℹ️ About")
+    st.header("🏠 Welcome")
     st.write(
-        "Created by Cameron Mahmood and Joseph Panaro. "
+        "This app showcases multiple quantitative finance projects built in Python. "
+        "Use the sidebar to navigate."
+    )
+
+    # Moved 'About' content here
+    st.subheader("ℹ️ About")
+    st.write(
+        "Created by **Cameron Mahmood** and **Joseph Panaro**. "
         "This dashboard includes option pricing, momentum strategies, portfolio optimization, "
         "and machine learning applications in finance."
+    )
+
+    # LinkedIn links (clickable)
+    st.markdown(
+        f"""
+**Connect with us:**  
+- Cameron Mahmood — [LinkedIn]({CAMLINK})  
+- Joseph Panaro — [LinkedIn]({JOELINK})
+        """
     )
 
 elif page == "Projects":
@@ -29,7 +44,7 @@ elif page == "Projects":
             "Momentum Strategies",
             "Option Pricing & Derivatives",
         ],
-        index=0
+        index=0,
     )
 
     if project == "Momentum Strategies":
@@ -50,7 +65,7 @@ elif page == "Projects":
         with st.expander("🎲 Monte Carlo Simulation for Option Pricing", expanded=False):
             op.run_monte_carlo()
 
-        # NEW: Market-Implied Move tool (ATM IV -> expected 1W/1M move)
+        # Optional: Market-Implied Move tool if present
         with st.expander("📈 Market-Implied Move (from ATM IV)", expanded=True):
             if hasattr(op, "run_implied_move"):
                 op.run_implied_move()
@@ -58,6 +73,6 @@ elif page == "Projects":
                 op.run_implied_move_table()
             else:
                 st.warning(
-                    "Add `run_implied_move()` (or `run_implied_move_table()`) "
-                    "to `option_projects.py` to render the implied move table."
+                    "Add `run_implied_move()` (or `run_implied_move_table()`) to `option_projects.py` "
+                    "to render the implied move table."
                 )
