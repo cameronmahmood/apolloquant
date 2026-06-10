@@ -231,7 +231,7 @@ def _fmt_num(x):
 def _ensure_month_end_index(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.index = pd.to_datetime(df.index)
-    return df.resample("M").last()
+    return df.resample("ME").last()
 
 def _parse_csv(file) -> pd.DataFrame:
     df = pd.read_csv(file)
@@ -246,7 +246,7 @@ def _parse_csv(file) -> pd.DataFrame:
 
 def _gen_demo_data(start="2010-01-31", periods=180, seed=42) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
-    dates = pd.date_range(start=start, periods=periods, freq="M")
+    dates = pd.date_range(start=start, periods=periods, freq="ME")
     US, INTL, CASH, TBILL = [100.0], [100.0], [100.0], [100.0]
     for _ in range(periods - 1):
         US.append(US[-1] * (1 + (rng.random() - 0.45) * 0.08))
