@@ -260,18 +260,15 @@ def _fetch_monthly_from_yf(tickers: dict[str, str], start="2005-01-01") -> pd.Da
     frames = {}
     for col, tkr in tickers.items():
         raw = yf.download(tkr, start=start, progress=False, auto_adjust=True)
-        # Flatten MultiIndex columns if present
+        # MultiIndex columns: ('Close', 'SPY') — select Close for this ticker
         if isinstance(raw.columns, pd.MultiIndex):
-            raw.columns = raw.columns.get_level_values(0)
-        # Get close price as a clean 1D Series
-        if "Close" in raw.columns:
+            s = raw[("Close", tkr)]
+        elif "Close" in raw.columns:
             s = raw["Close"]
         elif "Adj Close" in raw.columns:
             s = raw["Adj Close"]
         else:
             raise KeyError(f"Could not find price column for {tkr}")
-        if isinstance(s, pd.DataFrame):
-            s = s.iloc[:, 0]
         s = s.dropna()
         s.index = pd.to_datetime(s.index)
         frames[col] = s.rename(col)
