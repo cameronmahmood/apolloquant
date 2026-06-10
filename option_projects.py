@@ -326,16 +326,15 @@ def run_implied_move():
     st.subheader("📈 Market-Implied Move (from ATM IV)")
     st.caption(
         "Method: ATM IV (nearest ~7d and ~30d expiries) × sqrt(time in years) × spot. "
-        "If IV is missing, it’s backed out from the ATM call mid via Black–Scholes. "
+        "If IV is missing, it's backed out from the ATM call mid via Black–Scholes. "
         "Calendar days used for DTE."
     )
 
-    # --- Controls
     col1, col2 = st.columns([2, 1])
     with col1:
         tickers_text = st.text_input("Tickers (comma-separated)", value=",".join(_DEFAULT_TICKERS))
     with col2:
-        st.button("Refresh")  # triggers rerun
+        st.button("Refresh")
 
     tickers = [t.strip().upper() for t in tickers_text.split(",") if t.strip()]
     if not tickers:
@@ -395,9 +394,17 @@ def _implied_vol_from_mid(mkt_price, S, K, T, r=0.0, cp="c"):
         return np.nan
 
 def _mid(bid, ask, last):
-    if pd.notna(bid) and pd.notna(ask) and (bid > 0 or ask > 0):
-        return (bid + ask) / 2.0
-    return last if pd.notna(last) else np.nan
+    try:
+        if bid is not None and ask is not None and pd.notna(bid) and pd.notna(ask) and (float(bid) > 0 or float(ask) > 0):
+            return (float(bid) + float(ask)) / 2.0
+    except Exception:
+        pass
+    try:
+        if last is not None and pd.notna(last):
+            return float(last)
+    except Exception:
+        pass
+    return np.nan
 
 def _nearest_atm_strike(strikes, spot):
     arr = np.asarray(strikes, dtype=float)
@@ -406,66 +413,129 @@ def _nearest_atm_strike(strikes, spot):
     idx = np.abs(arr - spot).argmin()
     return float(arr[idx])
 
-def _get_atm_iv_for_exp(symbol: str, spot: float, exp: str):
-    """Return (ATM IV ann, DTE calendar days) for a given expiration."""
+def _flatten_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if isinstance(df.columns, pd.MultiIndex):
+        df = df.copy()
+        df.columns = df.columns.get_level_values(0)
+    return df
+
+def _get_spot(symbol: str) -> float:
+    """Get latest close price robustly."""
     try:
-        calls, puts = _cached_option_chain(symbol, exp)
-    except YFRateLimitError:
-        # Pass up a specific signal; caller will mark row
-        raise
+        tk = yf.Ticker(symbol)
+        hist = tk.history(period="5d", auto_adjust=True)
+        hist = _flatten_columns(hist)
+        if not hist.empty and "Close" in hist.columns:
+            return float(hist["Close"].dropna().iloc[-1])
+    except Exception:
+        pass
+    try:
+        raw = yf.download(symbol, period="5d", progress=False, auto_adjust=True)
+        raw = _flatten_columns(raw)
+        if not raw.empty and "Close" in raw.columns:
+            return float(raw["Close"].dropna().iloc[-1])
+    except Exception:
+        pass
+    return np.nan
+
+def _get_option_chain(symbol: str, exp: str):
+    """Get option chain robustly, returns (calls_df, puts_df) or (None, None)."""
+    try:
+        tk = yf.Ticker(symbol)
+        chain = tk.option_chain(exp)
+        calls = _flatten_columns(chain.calls.copy())
+        puts  = _flatten_columns(chain.puts.copy())
+        return calls, puts
+    except Exception:
+        return None, None
+
+def _get_atm_iv_for_exp(symbol: str, spot: float, exp: str):
+    """Return (ATM IV annualized, DTE calendar days)."""
+    # Compute DTE
+    try:
+        exp_dt = _to_dt(exp)
+        now = datetime.now(timezone.utc)
+        dte = max((exp_dt - now).days, 1)
     except Exception:
         return np.nan, 0
 
-    if calls.empty or puts.empty:
-        return np.nan, 0
+    T_years = dte / 365.0
+
+    try:
+        calls, puts = _cached_option_chain(symbol, exp)
+    except YFRateLimitError:
+        raise
+    except Exception:
+        return np.nan, dte
+
+    if calls is None or puts is None or calls.empty or puts.empty:
+        return np.nan, dte
+
+    calls = _flatten_columns(calls)
+    puts  = _flatten_columns(puts)
+
+    if "strike" not in calls.columns:
+        return np.nan, dte
 
     strikes = calls["strike"].values
     atm = _nearest_atm_strike(strikes, spot)
     if np.isnan(atm):
-        return np.nan, 0
+        return np.nan, dte
 
     call_row = calls[calls["strike"] == atm]
-    put_row  = puts[puts["strike"] == atm]
-    if call_row.empty or put_row.empty:
-        return np.nan, 0
+    put_row  = puts[puts["strike"] == atm] if "strike" in puts.columns else pd.DataFrame()
+
+    if call_row.empty:
+        return np.nan, dte
 
     call_row = call_row.iloc[0]
-    put_row  = put_row.iloc[0]
+    put_row  = put_row.iloc[0] if not put_row.empty else None
 
-    # Prefer reported IVs if present
+    # Try reported IV first
     ivs = []
     for col in ("impliedVolatility", "impliedVol"):
-        if col in call_row and pd.notna(call_row[col]): ivs.append(float(call_row[col]))
-        if col in put_row  and pd.notna(put_row[col]):  ivs.append(float(put_row[col]))
+        try:
+            v = call_row[col]
+            if pd.notna(v) and float(v) > 0.001:
+                ivs.append(float(v))
+        except Exception:
+            pass
+        if put_row is not None:
+            try:
+                v = put_row[col]
+                if pd.notna(v) and float(v) > 0.001:
+                    ivs.append(float(v))
+            except Exception:
+                pass
+
     if ivs:
-        atm_iv = float(np.nanmean(ivs))
-    else:
-        # Back out IV from call mid
-        call_mid = _mid(call_row.get("bid"), call_row.get("ask"), call_row.get("lastPrice"))
-        exp_dt = _to_dt(exp)
-        now = datetime.now(timezone.utc)
-        dte = max((exp_dt - now).days, 0)
-        T_years = max(dte, 1) / 365.0  # guard against 0
+        return float(np.nanmean(ivs)), int(dte)
+
+    # Fall back to backing out IV from call mid
+    try:
+        bid  = call_row["bid"]  if "bid"       in call_row.index else None
+        ask  = call_row["ask"]  if "ask"       in call_row.index else None
+        last = call_row["lastPrice"] if "lastPrice" in call_row.index else None
+        call_mid = _mid(bid, ask, last)
         atm_iv = _implied_vol_from_mid(call_mid, spot, float(atm), T_years, r=0.0, cp="c")
+        if pd.notna(atm_iv) and atm_iv > 0:
+            return float(atm_iv), int(dte)
+    except Exception:
+        pass
 
-    # Compute DTE for return
-    exp_dt = _to_dt(exp)
-    now = datetime.now(timezone.utc)
-    dte = max((exp_dt - now).days, 0)
-
-    return float(atm_iv) if pd.notna(atm_iv) else np.nan, int(dte)
+    return np.nan, int(dte)
 
 def _expected_move_dollars(spot: float, iv_ann: float, dte_calendar: int):
-    if pd.isna(iv_ann) or dte_calendar <= 0:
+    if pd.isna(iv_ann) or dte_calendar <= 0 or pd.isna(spot):
         return np.nan
     T_years = dte_calendar / 365.0
     return float(iv_ann * math.sqrt(T_years) * spot)
 
 def _fmt_pct(x):
-    return "" if pd.isna(x) else f"{x:.2f}%"
+    return "" if (x is None or pd.isna(x)) else f"{x:.2f}%"
 
 def _fmt_num(x, nd=2):
-    return "" if pd.isna(x) else f"{x:.{nd}f}"
+    return "" if (x is None or pd.isna(x)) else f"{x:.{nd}f}"
 
 def _build_implied_move_table(tickers):
     rows = []
@@ -473,25 +543,25 @@ def _build_implied_move_table(tickers):
     rate_limited_symbols = []
 
     for symbol in tickers:
-        # Spot price (last close)
+        # --- Spot price ---
         try:
-            hist = _cached_hist(symbol)
+            spot = _get_spot(symbol)
         except YFRateLimitError:
             rate_limited_symbols.append(symbol)
-            rows.append([symbol, "", "rate-limited", "", "", "", ""])
+            rows.append([symbol, "rate-limited", "", "", "", "", ""])
             continue
         except Exception:
-            rows.append([symbol, "", "error", "", "", "", ""])
+            rows.append([symbol, "error", "", "", "", "", ""])
             continue
 
-        if hist.empty:
-            rows.append([symbol, "", "", "", "", "", ""])
+        if pd.isna(spot):
+            rows.append([symbol, "no data", "", "", "", "", ""])
             continue
-        spot = float(hist["Close"].iloc[-1])
 
-        # Expirations list
+        # --- Expirations ---
         try:
-            expirations = _cached_options_list(symbol)
+            tk = yf.Ticker(symbol)
+            expirations = tk.options or []
         except YFRateLimitError:
             rate_limited_symbols.append(symbol)
             rows.append([symbol, _fmt_num(spot), "rate-limited", "", "", "", ""])
@@ -501,43 +571,38 @@ def _build_implied_move_table(tickers):
             continue
 
         if not expirations:
-            rows.append([symbol, _fmt_num(spot), "", "", "", "", ""])
+            rows.append([symbol, _fmt_num(spot), "no options", "", "", "", ""])
             continue
 
-        # Pick expiries nearest ~7d and ~30d
         exp_1w = _pick_expiration(expirations, _TARGETS["1W"])
         exp_1m = _pick_expiration(expirations, _TARGETS["1M"])
 
-        iv_1w, dte_1w = (np.nan, 0)
-        iv_1m, dte_1m = (np.nan, 0)
+        iv_1w, dte_1w = np.nan, 0
+        iv_1m, dte_1m = np.nan, 0
 
-        # Fetch chains (cached) + small delay to be gentle on API
         if exp_1w:
             try:
                 iv_1w, dte_1w = _get_atm_iv_for_exp(symbol, spot, exp_1w)
-                time.sleep(0.25)
+                time.sleep(0.2)
             except YFRateLimitError:
                 rate_limited_symbols.append(symbol)
+
         if exp_1m:
             try:
                 iv_1m, dte_1m = _get_atm_iv_for_exp(symbol, spot, exp_1m)
-                time.sleep(0.25)
+                time.sleep(0.2)
             except YFRateLimitError:
                 rate_limited_symbols.append(symbol)
 
-        # Expected moves
+        # --- Expected moves ---
         move1w_d = _expected_move_dollars(spot, iv_1w, dte_1w)
         move1m_d = _expected_move_dollars(spot, iv_1m, dte_1m)
-
         move1w_pct = (move1w_d / spot * 100.0) if pd.notna(move1w_d) else np.nan
         move1m_pct = (move1m_d / spot * 100.0) if pd.notna(move1m_d) else np.nan
 
-        # Display ATM IV as the ~30d IV when available (fallback to ~7d)
         atm_iv_display = iv_1m if pd.notna(iv_1m) else iv_1w
-
-        # If we were rate-limited for this symbol and got no IVs, mark it
-        atm_iv_text = "" if pd.isna(atm_iv_display) else f"{atm_iv_display:.4f}"
-        if (symbol in rate_limited_symbols) and pd.isna(atm_iv_display):
+        atm_iv_text = _fmt_num(atm_iv_display, 4) if pd.notna(atm_iv_display) else ""
+        if symbol in rate_limited_symbols and not atm_iv_text:
             atm_iv_text = "rate-limited"
 
         rows.append([
@@ -551,8 +616,10 @@ def _build_implied_move_table(tickers):
         ])
 
     if rate_limited_symbols:
-        notes.append(f"Yahoo API rate-limited for: {', '.join(sorted(set(rate_limited_symbols)))}. "
-                     "Cached data will auto-refresh after ~5 minutes.")
+        notes.append(
+            f"Yahoo API rate-limited for: {', '.join(sorted(set(rate_limited_symbols)))}. "
+            "Cached data will auto-refresh after ~5 minutes."
+        )
 
     df = pd.DataFrame(
         rows,
