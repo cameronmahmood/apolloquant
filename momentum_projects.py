@@ -230,7 +230,8 @@ def _fmt_num(x):
 
 def _ensure_month_end_index(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    df.index = pd.to_datetime(df.index)
+    df.index = pd.to_datetime(df.index.map(lambda x: x if not hasattr(x, 'date') else x))
+    df.index.name = None
     return df.resample("ME").last()
 
 def _parse_csv(file) -> pd.DataFrame:
@@ -260,7 +261,6 @@ def _fetch_monthly_from_yf(tickers: dict[str, str], start="2005-01-01") -> pd.Da
     frames = {}
     for col, tkr in tickers.items():
         raw = yf.download(tkr, start=start, progress=False, auto_adjust=True)
-        # MultiIndex columns: ('Close', 'SPY') — select Close for this ticker
         if isinstance(raw.columns, pd.MultiIndex):
             s = raw[("Close", tkr)]
         elif "Close" in raw.columns:
@@ -269,14 +269,19 @@ def _fetch_monthly_from_yf(tickers: dict[str, str], start="2005-01-01") -> pd.Da
             s = raw["Adj Close"]
         else:
             raise KeyError(f"Could not find price column for {tkr}")
+        if isinstance(s, pd.DataFrame):
+            s = s.iloc[:, 0]
         s = s.dropna()
         s.index = pd.to_datetime(s.index)
+        s.index.name = None
         frames[col] = s.rename(col)
     df = pd.concat(frames.values(), axis=1)
     df.columns = list(frames.keys())
-    df = _ensure_month_end_index(df)
-    df = df / df.iloc[0] * 100.0
-    return df.dropna(how="any")
+    df.index = pd.to_datetime(df.index)
+    df.index.name = None
+    monthly = df.resample("ME").last()
+    monthly = monthly / monthly.iloc[0] * 100.0
+    return monthly.dropna(how="any")
 
 def _lb_ret(series: pd.Series, i: int, L: int):
     if i - L < 0:
