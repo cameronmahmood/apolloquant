@@ -257,12 +257,19 @@ def _gen_demo_data(start="2010-01-31", periods=180, seed=42) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def _fetch_monthly_from_yf(tickers: dict[str, str], start="2005-01-01") -> pd.DataFrame:
-    data = {col: yf.download(tkr, start=start, progress=False)["Adj Close"].rename(col)
-            for col, tkr in tickers.items()}
-    df = pd.concat(data.values(), axis=1)
-    df.columns = list(data.keys())
+    frames = {}
+    for col, tkr in tickers.items():
+        raw = yf.download(tkr, start=start, progress=False, auto_adjust=True)
+        if "Close" in raw.columns:
+            frames[col] = raw["Close"].rename(col)
+        elif "Adj Close" in raw.columns:
+            frames[col] = raw["Adj Close"].rename(col)
+        else:
+            raise KeyError(f"Could not find price column for {tkr}")
+    df = pd.concat(frames.values(), axis=1)
+    df.columns = list(frames.keys())
     df = _ensure_month_end_index(df)
-    df = df / df.iloc[0] * 100.0  # normalize to index 100
+    df = df / df.iloc[0] * 100.0
     return df.dropna(how="any")
 
 def _lb_ret(series: pd.Series, i: int, L: int):
