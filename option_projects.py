@@ -142,12 +142,178 @@ def run_black_scholes():
     st.pyplot(fig)
 
 # =========================
-# Monte Carlo placeholder
+# Monte Carlo Simulation for Option Pricing
 # =========================
 
 def run_monte_carlo():
     st.subheader("🎲 Monte Carlo Simulation for Option Pricing")
-    st.info("This section is under construction.")
+    st.markdown(
+        "Simulate thousands of price paths using **Geometric Brownian Motion** to estimate "
+        "European option prices and compare against Black–Scholes."
+    )
+
+    # ---- Inputs ----
+    st.markdown("### 🔧 Inputs")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        S = st.number_input("Asset Price (S)", value=100.0, step=1.0, min_value=0.01, key="mc_S")
+    with c2:
+        K = st.number_input("Strike Price (K)", value=100.0, step=1.0, min_value=0.01, key="mc_K")
+    with c3:
+        T = st.number_input("Time to Maturity (years)", value=1.0, step=0.1, min_value=0.01, key="mc_T")
+
+    c4, c5, c6 = st.columns(3)
+    with c4:
+        r = st.number_input("Risk-Free Rate (%)", value=2.0, step=0.1, key="mc_r") / 100
+    with c5:
+        sigma = st.number_input("Volatility (%)", value=20.0, step=0.1, min_value=0.01, key="mc_sigma") / 100
+    with c6:
+        n_sims = st.selectbox("Number of Simulations", options=[1_000, 10_000, 50_000, 100_000], index=1, key="mc_sims")
+
+    c7, c8 = st.columns(2)
+    with c7:
+        n_steps = st.number_input("Time Steps", value=252, step=1, min_value=10, key="mc_steps")
+    with c8:
+        option_type = st.radio("Option Type", options=["Call", "Put"], horizontal=True, key="mc_type")
+
+    run = st.button("▶ Run Simulation", key="mc_run")
+    if not run:
+        return
+
+    opt_type = option_type.lower()
+
+    # ---- Simulation ----
+    with st.spinner(f"Running {n_sims:,} simulations..."):
+        dt = T / n_steps
+        # Shape: (n_steps, n_sims)
+        Z = np.random.standard_normal((n_steps, n_sims))
+        # Daily log-return increments
+        increments = (r - 0.5 * sigma**2) * dt + sigma * np.sqrt(dt) * Z
+        # Cumulative price paths: shape (n_steps+1, n_sims)
+        log_paths = np.vstack([np.zeros(n_sims), np.cumsum(increments, axis=0)])
+        price_paths = S * np.exp(log_paths)
+
+        # Terminal prices
+        S_T = price_paths[-1]
+
+        # Payoffs
+        if opt_type == "call":
+            payoffs = np.maximum(S_T - K, 0)
+        else:
+            payoffs = np.maximum(K - S_T, 0)
+
+        # Discounted expected payoff
+        mc_price = np.exp(-r * T) * np.mean(payoffs)
+        mc_stderr = np.exp(-r * T) * np.std(payoffs) / np.sqrt(n_sims)
+        mc_ci_low  = mc_price - 1.96 * mc_stderr
+        mc_ci_high = mc_price + 1.96 * mc_stderr
+
+        # Black–Scholes benchmark
+        bs_price = bs_price_european(S, K, T, r, sigma, opt_type)
+
+    # ---- Results ----
+    st.markdown("### 📊 Results")
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("MC Price", f"${mc_price:.4f}")
+    col2.metric("BS Price", f"${bs_price:.4f}", delta=f"{mc_price - bs_price:+.4f}")
+    col3.metric("95% CI Low", f"${mc_ci_low:.4f}")
+    col4.metric("95% CI High", f"${mc_ci_high:.4f}")
+
+    st.caption(
+        f"Std Error: ${mc_stderr:.4f} | "
+        f"Simulations: {n_sims:,} | "
+        f"Time Steps: {n_steps}"
+    )
+
+    # ---- Plots ----
+    st.markdown("### 📈 Simulated Price Paths")
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig.patch.set_facecolor("#0e1117")
+    for ax in axes:
+        ax.set_facecolor("#0e1117")
+        ax.tick_params(colors="white")
+        ax.xaxis.label.set_color("white")
+        ax.yaxis.label.set_color("white")
+        ax.title.set_color("white")
+        for spine in ax.spines.values():
+            spine.set_edgecolor("#444")
+
+    # --- Left: sample paths ---
+    n_display = min(200, n_sims)
+    t_axis = np.linspace(0, T, n_steps + 1)
+    for i in range(n_display):
+        axes[0].plot(t_axis, price_paths[:, i], alpha=0.15, linewidth=0.5, color="#1f77b4")
+    axes[0].axhline(K, color="red", linewidth=1.5, linestyle="--", label=f"Strike K={K}")
+    axes[0].axhline(S, color="yellow", linewidth=1.0, linestyle=":", label=f"Spot S={S}")
+    axes[0].set_xlabel("Time (years)")
+    axes[0].set_ylabel("Asset Price")
+    axes[0].set_title(f"{n_display} Sample Paths")
+    axes[0].legend(fontsize=8, labelcolor="white", facecolor="#1e1e1e")
+
+    # --- Right: terminal price distribution ---
+    axes[1].hist(S_T, bins=80, color="#1f77b4", edgecolor="none", alpha=0.85, density=True)
+    axes[1].axvline(K, color="red", linewidth=1.5, linestyle="--", label=f"Strike K={K}")
+    axes[1].axvline(np.mean(S_T), color="yellow", linewidth=1.2, linestyle=":", label=f"Mean=${np.mean(S_T):.2f}")
+    axes[1].set_xlabel("Terminal Price $S_T$")
+    axes[1].set_ylabel("Density")
+    axes[1].set_title("Terminal Price Distribution")
+    axes[1].legend(fontsize=8, labelcolor="white", facecolor="#1e1e1e")
+
+    plt.tight_layout()
+    st.pyplot(fig)
+
+    # ---- Convergence chart ----
+    st.markdown("### 🔁 Convergence of MC Price")
+
+    checkpoints = np.unique(np.logspace(2, np.log10(n_sims), num=60).astype(int))
+    conv_prices = []
+    for n in checkpoints:
+        sub_payoffs = payoffs[:n]
+        conv_prices.append(np.exp(-r * T) * np.mean(sub_payoffs))
+
+    fig2, ax2 = plt.subplots(figsize=(10, 4))
+    fig2.patch.set_facecolor("#0e1117")
+    ax2.set_facecolor("#0e1117")
+    ax2.tick_params(colors="white")
+    ax2.xaxis.label.set_color("white")
+    ax2.yaxis.label.set_color("white")
+    ax2.title.set_color("white")
+    for spine in ax2.spines.values():
+        spine.set_edgecolor("#444")
+
+    ax2.plot(checkpoints, conv_prices, color="#1f77b4", linewidth=1.5, label="MC Price")
+    ax2.axhline(bs_price, color="orange", linewidth=1.5, linestyle="--", label=f"BS Price ${bs_price:.4f}")
+    ax2.set_xlabel("Number of Simulations")
+    ax2.set_ylabel("Estimated Price")
+    ax2.set_title("MC Price Convergence vs Black–Scholes")
+    ax2.legend(fontsize=9, labelcolor="white", facecolor="#1e1e1e")
+    plt.tight_layout()
+    st.pyplot(fig2)
+
+    # ---- Payoff distribution ----
+    st.markdown("### 💰 Payoff Distribution")
+
+    fig3, ax3 = plt.subplots(figsize=(10, 4))
+    fig3.patch.set_facecolor("#0e1117")
+    ax3.set_facecolor("#0e1117")
+    ax3.tick_params(colors="white")
+    ax3.xaxis.label.set_color("white")
+    ax3.yaxis.label.set_color("white")
+    ax3.title.set_color("white")
+    for spine in ax3.spines.values():
+        spine.set_edgecolor("#444")
+
+    nonzero = payoffs[payoffs > 0]
+    pct_itm = 100.0 * len(nonzero) / n_sims
+    ax3.hist(nonzero, bins=60, color="#2ca02c", edgecolor="none", alpha=0.85, density=True)
+    ax3.set_xlabel("Payoff at Expiry")
+    ax3.set_ylabel("Density (ITM only)")
+    ax3.set_title(f"ITM Payoff Distribution  |  {pct_itm:.1f}% of paths expire ITM")
+    plt.tight_layout()
+    st.pyplot(fig3)
 
 # =========================
 # Market-Implied Move (ATM IV)
