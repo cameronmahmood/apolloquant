@@ -260,10 +260,13 @@ def _fetch_monthly_from_yf(tickers: dict[str, str], start="2005-01-01") -> pd.Da
     frames = {}
     for col, tkr in tickers.items():
         raw = yf.download(tkr, start=start, progress=False, auto_adjust=True)
+        # Flatten MultiIndex columns if present
+        if isinstance(raw.columns, pd.MultiIndex):
+            raw.columns = raw.columns.get_level_values(0)
         if "Close" in raw.columns:
-            frames[col] = raw["Close"].rename(col)
+            frames[col] = raw["Close"].squeeze().rename(col)
         elif "Adj Close" in raw.columns:
-            frames[col] = raw["Adj Close"].rename(col)
+            frames[col] = raw["Adj Close"].squeeze().rename(col)
         else:
             raise KeyError(f"Could not find price column for {tkr}")
     df = pd.concat(frames.values(), axis=1)
