@@ -255,7 +255,7 @@ def _gen_demo_data(start="2010-01-31", periods=180, seed=42) -> pd.DataFrame:
         TBILL.append(TBILL[-1] * (1 + 0.0015 + (rng.random() - 0.5) * 0.0015))
     return pd.DataFrame({"US": US, "INTL": INTL, "CASH": CASH, "TBILL": TBILL}, index=dates)
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=1)
 def _fetch_monthly_from_yf(tickers: dict[str, str], start="2005-01-01") -> pd.DataFrame:
     frames = {}
     for col, tkr in tickers.items():
