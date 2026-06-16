@@ -17,7 +17,7 @@ def _fetch_live_prices():
         "DXY": "DX-Y.NYB",
         "10Y Yield": "^TNX",
         "2Y Yield": "^IRX",
-        "S&P 500": "^GSPC",
+        "S&P 500": "SPY",
         "VIX": "^VIX",
     }
     prices = {}
