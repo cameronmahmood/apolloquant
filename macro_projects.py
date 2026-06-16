@@ -78,7 +78,7 @@ def _display_live_prices():
 def run_macro_research():
     st.subheader("🌍 Cross-Asset Market Outlook")
     st.markdown(
-        "**Updated June 16, 2026 | Cameron Mahmood — Delphi Macro**\n\n"
+        "**Updated June 16, 2026 | Cameron Mahmood**\n\n"
         "Bullish and bearish cases across Oil, the US Dollar, Treasury Yields, and Equities. "
         "Live market prices are pulled automatically at the top of each section."
     )
