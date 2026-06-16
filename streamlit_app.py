@@ -1,6 +1,7 @@
 import streamlit as st
 import momentum_projects as mp
 import option_projects as op
+import macro_projects as mrp
 
 CAMLINK = "https://www.linkedin.com/in/cameron-mahmood-86334628a"
 JOELINK = "https://www.linkedin.com/in/joseph-panaro-/"
@@ -43,6 +44,7 @@ elif page == "Projects":
         [
             "Momentum Strategies",
             "Option Pricing & Derivatives",
+            "Macro Research",
         ],
         index=0,
     )
@@ -76,3 +78,7 @@ elif page == "Projects":
                     "Add `run_implied_move()` (or `run_implied_move_table()`) to `option_projects.py` "
                     "to render the implied move table."
                 )
+
+    elif project == "Macro Research":
+        st.markdown("## 🌍 Macro Research")
+        mrp.run_macro_research()
