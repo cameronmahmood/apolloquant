@@ -9,9 +9,9 @@ JOELINK = "https://www.linkedin.com/in/joseph-panaro-/"
 st.set_page_config(page_title="Quant Finance Projects", layout="wide")
 st.title("📊 Quantitative Finance Projects")
 
-# Sidebar navigation (About removed)
+# Sidebar navigation
 st.sidebar.title("🔗 Navigation")
-page = st.sidebar.radio("Go to", ["Home", "Projects"])
+page = st.sidebar.radio("Go to", ["Home", "Projects", "Macro Research"])
 
 if page == "Home":
     st.header("🏠 Welcome")
@@ -20,7 +20,6 @@ if page == "Home":
         "Use the sidebar to navigate."
     )
 
-    # Moved 'About' content here
     st.subheader("ℹ️ About")
     st.write(
         "Created by **Cameron Mahmood** and **Joseph Panaro**. "
@@ -28,7 +27,6 @@ if page == "Home":
         "and machine learning applications in finance."
     )
 
-    # LinkedIn links (clickable)
     st.markdown(
         f"""
 **Connect with us:**  
@@ -44,7 +42,6 @@ elif page == "Projects":
         [
             "Momentum Strategies",
             "Option Pricing & Derivatives",
-            "Macro Research",
         ],
         index=0,
     )
@@ -67,18 +64,5 @@ elif page == "Projects":
         with st.expander("🎲 Monte Carlo Simulation for Option Pricing", expanded=False):
             op.run_monte_carlo()
 
-        # Optional: Market-Implied Move tool if present
         with st.expander("📈 Market-Implied Move (from ATM IV)", expanded=True):
-            if hasattr(op, "run_implied_move"):
-                op.run_implied_move()
-            elif hasattr(op, "run_implied_move_table"):
-                op.run_implied_move_table()
-            else:
-                st.warning(
-                    "Add `run_implied_move()` (or `run_implied_move_table()`) to `option_projects.py` "
-                    "to render the implied move table."
-                )
-
-    elif project == "Macro Research":
-        st.markdown("## 🌍 Macro Research")
-        mrp.run_macro_research()
+            if hasattr(op,
