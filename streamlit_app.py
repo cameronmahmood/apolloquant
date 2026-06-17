@@ -5,7 +5,6 @@ import macro_projects as mrp
 import regime_classifier as rc
 
 CAMLINK = "https://www.linkedin.com/in/cameron-mahmood-86334628a"
-GITHUBLINK = "https://github.com/cameronmahmood"
 
 st.set_page_config(page_title="Apollo Quant", layout="wide")
 st.title("📊 Quantitative Finance Projects")
@@ -49,7 +48,7 @@ AI-driven regime classifier using nine cross-asset signals (VIX, yield curve, cr
     st.markdown("---")
     st.subheader("🔗 Connect")
     st.markdown(f"""
-- **Cameron Mahmood** — [LinkedIn]({CAMLINK}) | [GitHub]({GITHUBLINK})
+- **Cameron Mahmood** — [LinkedIn]({CAMLINK}) 
 - **Providence College** — B.A. Quantitative Finance, Expected May 2027
     """)
 
