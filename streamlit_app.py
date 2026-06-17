@@ -2,6 +2,7 @@ import streamlit as st
 import momentum_projects as mp
 import option_projects as op
 import macro_projects as mrp
+import regime_classifier as rc
 
 CAMLINK = "https://www.linkedin.com/in/cameron-mahmood-86334628a"
 JOELINK = "https://www.linkedin.com/in/joseph-panaro-/"
@@ -10,7 +11,7 @@ st.set_page_config(page_title="Quant Finance Projects", layout="wide")
 st.title("📊 Quantitative Finance Projects")
 
 st.sidebar.title("🔗 Navigation")
-page = st.sidebar.radio("Go to", ["Home", "Projects", "Macro Research"])
+page = st.sidebar.radio("Go to", ["Home", "Projects", "Macro Research", "Market Regime"])
 
 if page == "Home":
     st.header("🏠 Welcome")
@@ -44,3 +45,6 @@ elif page == "Projects":
 
 elif page == "Macro Research":
     mrp.run_macro_research()
+
+elif page == "Market Regime":
+    rc.run_regime_classifier()
