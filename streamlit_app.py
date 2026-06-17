@@ -1,4 +1,3 @@
-cat > /workspaces/apolloquant/streamlit_app.py << 'EOF'
 import streamlit as st
 import momentum_projects as mp
 import option_projects as op
@@ -85,4 +84,3 @@ elif page == "Macro Research":
 
 elif page == "Market Regime":
     rc.run_regime_classifier()
-EOF
