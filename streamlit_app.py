@@ -51,8 +51,7 @@ AI-driven regime classifier using nine cross-asset signals (VIX, yield curve, cr
     st.markdown(f"""
 - **Cameron Mahmood** — [LinkedIn]({CAMLINK}) | [GitHub]({GITHUBLINK})
 - **Providence College** — B.A. Quantitative Finance, Expected May 2027
-- **Delphi Macro** — Head of Quantitative Modeling
-    """)
+
 
     st.caption(f"Last updated: June 2026 | apolloquant.streamlit.app")
 
