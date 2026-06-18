@@ -140,7 +140,7 @@ def run_sector_rotation():
     # ---- Heatmap ----
     st.markdown("### 🌡️ Performance Heatmap")
     heatmap_cols = list(PERIODS.keys())
-    heatmap_data = results.set_index("Sector")[heatmap_cols].dropna()
+    heatmap_data = results.set_index("Sector")[heatmap_cols].dropna(how="all")
 
     fig, ax = plt.subplots(figsize=(14, 6))
     fig.patch.set_facecolor("#0e1117"); _dark_ax(ax)
@@ -158,7 +158,8 @@ def run_sector_rotation():
     for i in range(len(heatmap_data)):
         for j in range(len(heatmap_cols)):
             val = data[i, j]
-            ax.text(j, i, f"{val:+.1f}%", ha="center", va="center",
+            if not np.isnan(val):
+                ax.text(j, i, f"{val:+.1f}%", ha="center", va="center",
                     color="white" if abs(val) > vmax * 0.5 else "black", fontsize=8, fontweight="bold")
 
     plt.colorbar(im, ax=ax, label="Return %", shrink=0.8)
