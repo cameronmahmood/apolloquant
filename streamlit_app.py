@@ -8,6 +8,9 @@ import pairs_trading as pt
 import technical_analysis as ta
 import relative_strength as rs
 import yield_curve as yc
+import sector_rotation as sr
+import economic_calendar as ec
+import fear_greed as fg
 
 CAMLINK = "https://www.linkedin.com/in/cameron-mahmood-86334628a"
 GITHUBLINK = "https://github.com/cameronmahmood"
@@ -134,13 +137,13 @@ elif page == "Research & Macro":
         yc.run_yield_curve()
 
     elif tool == "Sector Rotation Heatmap":
-        st.info("🔧 Sector Rotation Heatmap — Coming Soon")
+        sr.run_sector_rotation()
 
     elif tool == "Economic Calendar":
-        st.info("🔧 Economic Calendar — Coming Soon")
+        ec.run_economic_calendar()
 
     elif tool == "Fear & Greed Index":
-        st.info("🔧 Fear & Greed Index — Coming Soon")
+        fg.run_fear_greed()
 
 # ─────────────────────────────────────────
 # RISK & PORTFOLIO
