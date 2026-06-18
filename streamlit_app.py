@@ -106,7 +106,7 @@ elif page == "Trading Tools":
         pt.run_pairs_trading()
 
     elif tool == "Relative Strength Scanner":
-        st.info("🔧 Relative Strength Scanner — Coming Soon")
+        rs.run_relative_strength()
 
 # ─────────────────────────────────────────
 # RESEARCH & MACRO
