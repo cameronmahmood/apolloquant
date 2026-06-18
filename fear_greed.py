@@ -68,7 +68,7 @@ def _compute_fear_greed(data: dict):
         }
 
     # 2. Market Momentum (S&P 500 vs 125-day MA)
-    spy = data.get("SPY") or data.get("IVV")
+    spy = data.get("IVV") if data.get("SPY") is None else data.get("SPY")
     if spy is not None and len(spy) > 125:
         ma125 = spy.rolling(125).mean()
         spy_now = spy.iloc[-1]
