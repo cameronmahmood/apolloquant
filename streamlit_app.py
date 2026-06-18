@@ -5,6 +5,7 @@ import macro_projects as mrp
 import regime_classifier as rc
 import mean_reversion as mr
 import pairs_trading as pt
+import technical_analysis as ta
 
 CAMLINK = "https://www.linkedin.com/in/cameron-mahmood-86334628a"
 GITHUBLINK = "https://github.com/cameronmahmood"
@@ -99,7 +100,7 @@ elif page == "Trading Tools":
         mr.run_mean_reversion()
 
     elif tool == "MACD & Technical Signals":
-        st.info("🔧 MACD & Technical Signals — Coming Soon")
+        ta.run_technical_analysis()
 
     elif tool == "Pairs Trading":
         pt.run_pairs_trading()
