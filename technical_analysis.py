@@ -79,8 +79,8 @@ def _find_support_resistance(close: pd.Series, window=20, n_levels=5):
         elif close.iloc[i] == local_min:
             levels.append(("support", float(close.iloc[i]), close.index[i]))
 
-    support = sorted([l for l in levels if l[0] == "support"], key=lambda x: -x[2])
-    resistance = sorted([l for l in levels if l[0] == "resistance"], key=lambda x: -x[2])
+    support = sorted([l for l in levels if l[0] == "support"], key=lambda x: x[2], reverse=True)
+    resistance = sorted([l for l in levels if l[0] == "resistance"], key=lambda x: x[2], reverse=True)
 
     seen_support = []
     for s in support:
