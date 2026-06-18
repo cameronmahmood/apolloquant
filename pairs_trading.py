@@ -353,7 +353,8 @@ def run_pairs_trading():
         return
 
     # ---- Fetch ----
-    start_date = (datetime.now() - timedelta(days=365*2)).strftime("%Y-%m-%d")
+    days_map = {"6 Months": 182, "1 Year": 365, "2 Years": 730}
+    start_date = (datetime.now() - timedelta(days=days_map[period_label])).strftime("%Y-%m-%d")
     with st.spinner(f"Fetching {t1} and {t2}..."):
         prices = _fetch_pair(t1, t2, start_date)
 
