@@ -7,6 +7,7 @@ import mean_reversion as mr
 import pairs_trading as pt
 import technical_analysis as ta
 import relative_strength as rs
+import yield_curve as yc
 
 CAMLINK = "https://www.linkedin.com/in/cameron-mahmood-86334628a"
 GITHUBLINK = "https://github.com/cameronmahmood"
@@ -130,7 +131,7 @@ elif page == "Research & Macro":
         rc.run_regime_classifier()
 
     elif tool == "Yield Curve Visualizer":
-        st.info("🔧 Yield Curve Visualizer — Coming Soon")
+        yc.run_yield_curve()
 
     elif tool == "Sector Rotation Heatmap":
         st.info("🔧 Sector Rotation Heatmap — Coming Soon")
