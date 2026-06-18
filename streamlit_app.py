@@ -3,6 +3,7 @@ import momentum_projects as mp
 import option_projects as op
 import macro_projects as mrp
 import regime_classifier as rc
+import mean_reversion as mr
 
 CAMLINK = "https://www.linkedin.com/in/cameron-mahmood-86334628a"
 GITHUBLINK = "https://github.com/cameronmahmood"
@@ -94,7 +95,7 @@ elif page == "Trading Tools":
             mp.run_dual_momentum()
 
     elif tool == "Mean Reversion Scanner":
-        st.info("🔧 Mean Reversion Scanner — Coming Soon")
+        mr.run_mean_reversion()
 
     elif tool == "MACD & Technical Signals":
         st.info("🔧 MACD & Technical Signals — Coming Soon")
