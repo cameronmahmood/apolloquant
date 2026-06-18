@@ -6,6 +6,7 @@ import regime_classifier as rc
 import mean_reversion as mr
 import pairs_trading as pt
 import technical_analysis as ta
+import relative_strength as rs
 
 CAMLINK = "https://www.linkedin.com/in/cameron-mahmood-86334628a"
 GITHUBLINK = "https://github.com/cameronmahmood"
