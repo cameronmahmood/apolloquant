@@ -146,7 +146,8 @@ def run_sector_rotation():
     fig.patch.set_facecolor("#0e1117"); _dark_ax(ax)
 
     data = heatmap_data.values.astype(float)
-    vmax = max(abs(data.max()), abs(data.min()), 5)
+    data_clean = data[~np.isnan(data)]
+    vmax = max(abs(data_clean.max()), abs(data_clean.min()), 5) if len(data_clean) > 0 else 10
     im = ax.imshow(data, cmap="RdYlGn", aspect="auto", vmin=-vmax, vmax=vmax)
 
     ax.set_xticks(range(len(heatmap_cols)))
