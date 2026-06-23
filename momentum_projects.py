@@ -27,8 +27,7 @@ def run_sma():
 
 # ============================================================
 #  Cross-Sectional Momentum (stocks + commodities selector)
-#  FIXED: stale date bug — uses dropna(how='all') so recent
-#         months with partial NaN data are no longer excluded.
+#  FIXED: stale date bug + IndexError when backtest is empty
 # ============================================================
 def run_cross_sectional():
     st.subheader("\U0001F501 Cross-Sectional Momentum Across Sectors")
@@ -109,16 +108,10 @@ def run_cross_sectional():
     st.subheader("Momentum Scores (Last 10 Rows)")
     st.dataframe(momentum.tail(10).round(4))
 
-    # -------------------------------------------------------
-    # FIX: use momentum.index[-1] so we always get the most
-    # recent month, even if some tickers have NaN that month.
-    # Old code used momentum.dropna().index[-1] which silently
-    # skipped to 2023 whenever any ticker was missing data.
-    # -------------------------------------------------------
+    # FIX 1: Always use the true last date — don't let NaNs in any
+    # single ticker push the "latest" ranking back years.
     last_rebalance = momentum.index[-1]
     st.subheader(f"Latest Momentum Ranking on {last_rebalance.strftime('%Y-%m-%d')}")
-
-    # Drop only the tickers that are NaN at the latest date (not the whole row)
     latest_scores = momentum.loc[last_rebalance].drop("SPY").dropna()
     st.dataframe(latest_scores.sort_values(ascending=False).round(4))
 
@@ -127,18 +120,20 @@ def run_cross_sectional():
     portfolio_values, spy_values, monthly_returns, rebalance_log = [], [], [], []
     selection_matrix = pd.DataFrame(0, index=momentum.index, columns=monthly_prices.columns)
 
-    # FIX: how='all' — only skip a month if EVERY ticker is NaN,
-    # not when just one ticker is missing (old behaviour).
+    # FIX 2: how='all' — only skip months where EVERY ticker is NaN
     rebalance_dates = momentum.dropna(how="all").index
 
     for date in rebalance_dates:
         try:
-            # Rank only tickers that have a score this month
             past_returns = momentum.loc[date].drop("SPY").dropna()
-            if len(past_returns) < top_n:
-                continue  # not enough ranked tickers to fill the portfolio
 
-            top_names = past_returns.nlargest(top_n)
+            # FIX 3: use however many tickers are available (up to top_n)
+            # instead of skipping the month entirely when < top_n have data
+            actual_top_n = min(top_n, len(past_returns))
+            if actual_top_n == 0:
+                continue
+
+            top_names = past_returns.nlargest(actual_top_n)
             entry_prices = monthly_prices.loc[date, top_names.index]
 
             exit_idx = monthly_prices.index.get_loc(date) + holding_period_months
@@ -151,7 +146,7 @@ def run_cross_sectional():
             position_marks = pd.Series(0, index=monthly_prices.columns)
 
             if short_bottom:
-                bottom_names = past_returns.nsmallest(top_n)
+                bottom_names = past_returns.nsmallest(actual_top_n)
                 short_entry = monthly_prices.loc[date, bottom_names.index]
                 short_exit = monthly_prices.loc[exit_date, bottom_names.index]
                 short_returns = (short_entry - short_exit) / short_entry
@@ -183,6 +178,11 @@ def run_cross_sectional():
             })
         except Exception:
             continue
+
+    # FIX 4: Guard all metrics/charts against an empty backtest result
+    if not portfolio_values:
+        st.warning("Not enough data to run backtest. Try selecting more tickers or a broader universe.")
+        return
 
     result_df = pd.DataFrame({
         "Portfolio Value": portfolio_values,
