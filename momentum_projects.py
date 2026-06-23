@@ -238,6 +238,7 @@ def run_cross_sectional():
 
 # ============================================================
 #  Dual Momentum (helpers + UI in the expander body)
+#  FIXED: yfinance NaT bug, always fetches to today
 # ============================================================
 def _fmt_pct(x):
     return "—" if x is None or (isinstance(x, float) and pd.isna(x)) else f"{x*100:.2f}%"
@@ -273,32 +274,62 @@ def _gen_demo_data(start="2010-01-31", periods=180, seed=42) -> pd.DataFrame:
         TBILL.append(TBILL[-1] * (1 + 0.0015 + (rng.random() - 0.5) * 0.0015))
     return pd.DataFrame({"US": US, "INTL": INTL, "CASH": CASH, "TBILL": TBILL}, index=dates)
 
-@st.cache_data(show_spinner=False, ttl=1)
-def _fetch_monthly_from_yf(tickers: dict[str, str], start="2005-01-01") -> pd.DataFrame:
+# FIX: ttl=3600 (refresh hourly), end date always = today,
+# robust column extraction that works with all yfinance versions
+@st.cache_data(show_spinner=False, ttl=3600)
+def _fetch_monthly_from_yf(tickers: dict, start: str = "2005-01-01") -> pd.DataFrame:
+    end = datetime.today().strftime("%Y-%m-%d")   # always current date
     frames = {}
     for col, tkr in tickers.items():
-        raw = yf.download(tkr, start=start, progress=False, auto_adjust=True)
+        try:
+            raw = yf.download(tkr, start=start, end=end, progress=False, auto_adjust=True)
+        except Exception as e:
+            raise RuntimeError(f"Failed to download {tkr}: {e}")
+
+        if raw is None or raw.empty:
+            raise ValueError(f"No data returned for ticker: {tkr}")
+
+        # FIX: flatten MultiIndex columns robustly for all yfinance versions
         if isinstance(raw.columns, pd.MultiIndex):
-            s = raw[("Close", tkr)]
-        elif "Close" in raw.columns:
-            s = raw["Close"]
-        elif "Adj Close" in raw.columns:
-            s = raw["Adj Close"]
-        else:
-            raise KeyError(f"Could not find price column for {tkr}")
-        if isinstance(s, pd.DataFrame):
-            s = s.iloc[:, 0]
-        s = s.dropna()
+            raw.columns = ['_'.join([str(c) for c in col_tuple if str(c) != tkr]).strip('_') or col_tuple[0]
+                           for col_tuple in raw.columns]
+
+        # Try multiple possible column names
+        price_col = None
+        for candidate in ["Close", "Adj Close", f"Close_{tkr}", f"Adj Close_{tkr}"]:
+            if candidate in raw.columns:
+                price_col = candidate
+                break
+        if price_col is None:
+            # Last resort: take the first numeric column
+            numeric_cols = raw.select_dtypes(include="number").columns.tolist()
+            if not numeric_cols:
+                raise KeyError(f"No usable price column found for {tkr}. Columns: {list(raw.columns)}")
+            price_col = numeric_cols[0]
+
+        s = raw[price_col].dropna()
+        if s.empty:
+            raise ValueError(f"Price series is empty after dropna for {tkr}")
+
         s.index = pd.to_datetime(s.index)
         s.index.name = None
         frames[col] = s.rename(col)
+
     df = pd.concat(frames.values(), axis=1)
     df.columns = list(frames.keys())
     df.index = pd.to_datetime(df.index)
     df.index.name = None
+
     monthly = df.resample("ME").last()
+    monthly = monthly.dropna(how="any")
+
+    if monthly.empty:
+        raise ValueError("Monthly data is empty after resampling — check your tickers and date range.")
+
+    # Normalize to 100 at start
     monthly = monthly / monthly.iloc[0] * 100.0
-    return monthly.dropna(how="any")
+    return monthly
+
 
 def _lb_ret(series: pd.Series, i: int, L: int):
     if i - L < 0:
@@ -395,7 +426,7 @@ def run_dual_momentum():
     st.subheader("\U0001F9EE Dual Momentum Strategy")
     st.write("Combines time-series and cross-sectional filters to build a robust long-only ETF strategy.")
 
-    # === Inputs in-body (NOT sidebar) ===
+    # === Inputs ===
     st.markdown("### Inputs")
     c0, c1, c2 = st.columns([1, 1, 1])
     with c0:
@@ -412,7 +443,7 @@ def run_dual_momentum():
         src = st.radio(
             "Data Source",
             ["Upload CSV", "Demo (synthetic)", "Fetch with yfinance"],
-            index=1,
+            index=2,          # FIX: default to yfinance instead of demo
             key="dm_src",
             horizontal=True,
         )
@@ -428,30 +459,37 @@ def run_dual_momentum():
         st.markdown("**Example tickers** (change as desired):")
         cA, cB = st.columns(2)
         with cA:
-            us_tkr = st.text_input("US (e.g., SPY)", value="SPY", key="dm_us")
-            cash_tkr = st.text_input("Cash/Bonds (e.g., IEF/SHY)", value="IEF", key="dm_cash")
+            us_tkr   = st.text_input("US (e.g., SPY)",             value="SPY",  key="dm_us")
+            cash_tkr = st.text_input("Cash/Bonds (e.g., IEF/SHY)", value="IEF",  key="dm_cash")
         with cB:
-            intl_tkr = st.text_input("INTL (e.g., ACWX/EFA)", value="ACWX", key="dm_intl")
-            tbill_tkr = st.text_input("T-Bill (e.g., BIL)", value="BIL", key="dm_tbill")
+            intl_tkr  = st.text_input("INTL (e.g., ACWX/EFA)",    value="ACWX", key="dm_intl")
+            tbill_tkr = st.text_input("T-Bill (e.g., BIL)",        value="BIL",  key="dm_tbill")
+        # FIX: start is fixed; end is always today (handled inside _fetch_monthly_from_yf)
         start = st.date_input("Start date", value=pd.Timestamp("2005-01-01"), key="dm_start").strftime("%Y-%m-%d")
+        st.caption(f"Data will be fetched up to today: **{datetime.today().strftime('%Y-%m-%d')}**")
         yf_block = (us_tkr, intl_tkr, cash_tkr, tbill_tkr, start)
 
     # === Load data ===
     if src == "Upload CSV" and uploaded is not None:
         try:
             levels = _parse_csv(uploaded)
-            st.success(f"Loaded CSV with {len(levels):,} rows from {levels.index.min().date()} to {levels.index.max().date()}")
+            st.success(f"Loaded CSV: {levels.index.min().date()} → {levels.index.max().date()}")
         except Exception as e:
             st.error(f"CSV parse error: {e}")
             levels = _gen_demo_data()
     elif src == "Fetch with yfinance" and yf_block is not None:
         us_tkr, intl_tkr, cash_tkr, tbill_tkr, start = yf_block
-        try:
-            levels = _fetch_monthly_from_yf({"US": us_tkr, "INTL": intl_tkr, "CASH": cash_tkr, "TBILL": tbill_tkr}, start=start)
-            st.success(f"Fetched yfinance data from {levels.index.min().date()} to {levels.index.max().date()}")
-        except Exception as e:
-            st.error(f"yfinance error: {e}")
-            levels = _gen_demo_data()
+        with st.spinner("Fetching live data from yfinance..."):
+            try:
+                levels = _fetch_monthly_from_yf(
+                    {"US": us_tkr, "INTL": intl_tkr, "CASH": cash_tkr, "TBILL": tbill_tkr},
+                    start=start
+                )
+                st.success(f"✅ Live data: {levels.index.min().date()} → {levels.index.max().date()}")
+            except Exception as e:
+                st.error(f"yfinance error: {e}")
+                st.info("Falling back to demo data.")
+                levels = _gen_demo_data()
     else:
         levels = _gen_demo_data()
 
@@ -466,14 +504,14 @@ def run_dual_momentum():
     st.subheader("Performance (since first full signal)")
     c1, c2, c3, c4, c5, c6, c7, c8 = st.columns(8)
     m = res.metrics
-    c1.metric("CAGR", _fmt_pct(m.get("CAGR")))
-    c2.metric("Ann. Vol", _fmt_pct(m.get("AnnVol")))
-    c3.metric("Sharpe", _fmt_num(m.get("Sharpe")))
-    c4.metric("Sortino", _fmt_num(m.get("Sortino")))
+    c1.metric("CAGR",         _fmt_pct(m.get("CAGR")))
+    c2.metric("Ann. Vol",     _fmt_pct(m.get("AnnVol")))
+    c3.metric("Sharpe",       _fmt_num(m.get("Sharpe")))
+    c4.metric("Sortino",      _fmt_num(m.get("Sortino")))
     c5.metric("Max Drawdown", _fmt_pct(m.get("MaxDD")))
-    c6.metric("Calmar", _fmt_num(m.get("Calmar")))
-    c7.metric("Win Rate", _fmt_pct(m.get("WinRate")))
-    c8.metric("# Months", _fmt_num(m.get("Samples")))
+    c6.metric("Calmar",       _fmt_num(m.get("Calmar")))
+    c7.metric("Win Rate",     _fmt_pct(m.get("WinRate")))
+    c8.metric("# Months",     _fmt_num(m.get("Samples")))
 
     # === Charts ===
     st.subheader("Equity Curve & Drawdown")
@@ -488,12 +526,24 @@ def run_dual_momentum():
     st.subheader("Allocation Timeline (weights)")
     st.area_chart(res.weights.fillna(0.0))
 
-    # === Trades ===
+    # === Current signal — most important for live trading ===
+    st.subheader("📡 Current Signal")
+    if not res.trades.empty:
+        current_position = res.trades["Position"].iloc[-1]
+        current_reason   = res.trades["Reason"].iloc[-1]
+        signal_date      = res.trades.index[-1].strftime("%Y-%m-%d")
+        color = {"US": "🟢", "INTL": "🔵", "CASH": "🔴"}.get(current_position, "⚪")
+        st.markdown(f"### {color} Hold **{current_position}** (as of {signal_date})")
+        st.caption(f"Reason: {current_reason}")
+    else:
+        st.info("No signal yet — insufficient history for the selected lookback.")
+
+    # === Trade Log ===
     st.subheader("Trade Log")
     if not res.trades.empty:
         st.dataframe(res.trades, use_container_width=True)
     else:
-        st.info("No switches yet (insufficient history for selected lookback or constant allocation).")
+        st.info("No switches yet.")
 
     # === Downloads ===
     st.subheader("Export Results")
@@ -506,7 +556,6 @@ def run_dual_momentum():
         file_name="dual_momentum_results.csv",
         mime="text/csv",
     )
-
     if not res.trades.empty:
         buf2 = io.StringIO()
         res.trades.to_csv(buf2, index=True)
