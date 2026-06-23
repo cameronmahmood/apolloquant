@@ -11,6 +11,11 @@ import yield_curve as yc
 import sector_rotation as sr
 import economic_calendar as ec
 import fear_greed as fg
+import var_calculator as vc
+import correlation_matrix as cm
+import stress_testing as st_test
+import factor_model as fm
+import portfolio_optimizer as po
 
 CAMLINK = "https://www.linkedin.com/in/cameron-mahmood-86334628a"
 GITHUBLINK = "https://github.com/cameronmahmood"
@@ -159,19 +164,19 @@ elif page == "Risk & Portfolio":
     ])
 
     if tool == "VaR Calculator":
-        st.info("🔧 VaR Calculator — Coming Soon")
+        vc.run_var_calculator()
 
     elif tool == "Correlation Matrix":
-        st.info("🔧 Correlation Matrix — Coming Soon")
+        cm.run_correlation_matrix()
 
     elif tool == "Stress Testing":
-        st.info("🔧 Stress Testing — Coming Soon")
+        st_test.run_stress_testing()
 
     elif tool == "Factor Model (Fama-French)":
-        st.info("🔧 Factor Model — Coming Soon")
+        fm.run_factor_model()
 
     elif tool == "Portfolio Optimizer":
-        st.info("🔧 Portfolio Optimizer — Coming Soon")
+        po.run_portfolio_optimizer()
 
 # ─────────────────────────────────────────
 # PERFORMANCE
