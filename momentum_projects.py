@@ -27,6 +27,8 @@ def run_sma():
 
 # ============================================================
 #  Cross-Sectional Momentum (stocks + commodities selector)
+#  FIXED: stale date bug — uses dropna(how='all') so recent
+#         months with partial NaN data are no longer excluded.
 # ============================================================
 def run_cross_sectional():
     st.subheader("\U0001F501 Cross-Sectional Momentum Across Sectors")
@@ -34,7 +36,7 @@ def run_cross_sectional():
 
     # --- Parameters ---
     start_date = "2019-01-01"
-    end_date = datetime.today().strftime("%Y-%m-%d")
+    end_date = datetime.today().strftime("%Y-%m-%d")   # always today
     lookback_months = 3
     holding_period_months = 1
     top_n = 5
@@ -48,10 +50,10 @@ def run_cross_sectional():
     ]
     COMMODITIES = {
         "📊 Broad Commodity Indexes": ["DBC", "PDBC", "COMT", "BCI"],
-        "⚡ Energy": ["USO", "BNO", "UNG", "UGA", "XLE"],  # XLE = equities proxy
+        "⚡ Energy": ["USO", "BNO", "UNG", "UGA", "XLE"],
         "🥇 Metals — Precious": ["GLD", "SLV", "PLTM", "PALL"],
         "🔩 Metals — Industrial": ["CPER", "JJN", "SLX"],
-        "⛏️ Miners": ["SGDM"],  # or SGDJ
+        "⛏️ Miners": ["SGDM"],
         "🌾 Agriculture": ["CORN", "SOYB", "WEAT", "JO", "NIB", "CANE"],
         "🐄 Livestock": ["COW"],
         "🚀 Thematic / Special Commodities": ["URA", "LIT", "KRBN"],
@@ -97,7 +99,7 @@ def run_cross_sectional():
     # ===== Data =====
     with st.spinner("Downloading data..."):
         price_data = yf.download(main_tickers, start=start_date, end=end_date, auto_adjust=True)[["Close"]]
-        price_data.columns = price_data.columns.droplevel(0)  # drop 'Close' level
+        price_data.columns = price_data.columns.droplevel(0)
         spy_data = yf.download("SPY", start=start_date, end=end_date, auto_adjust=True)["Close"]
         price_data["SPY"] = spy_data
 
@@ -107,19 +109,35 @@ def run_cross_sectional():
     st.subheader("Momentum Scores (Last 10 Rows)")
     st.dataframe(momentum.tail(10).round(4))
 
-    last_rebalance = momentum.dropna().index[-1]
+    # -------------------------------------------------------
+    # FIX: use momentum.index[-1] so we always get the most
+    # recent month, even if some tickers have NaN that month.
+    # Old code used momentum.dropna().index[-1] which silently
+    # skipped to 2023 whenever any ticker was missing data.
+    # -------------------------------------------------------
+    last_rebalance = momentum.index[-1]
     st.subheader(f"Latest Momentum Ranking on {last_rebalance.strftime('%Y-%m-%d')}")
-    st.dataframe(momentum.loc[last_rebalance].drop("SPY").sort_values(ascending=False).round(4))
+
+    # Drop only the tickers that are NaN at the latest date (not the whole row)
+    latest_scores = momentum.loc[last_rebalance].drop("SPY").dropna()
+    st.dataframe(latest_scores.sort_values(ascending=False).round(4))
 
     # ===== Backtest =====
     portfolio_value = 1000.0
     portfolio_values, spy_values, monthly_returns, rebalance_log = [], [], [], []
     selection_matrix = pd.DataFrame(0, index=momentum.index, columns=monthly_prices.columns)
-    rebalance_dates = momentum.dropna().index
+
+    # FIX: how='all' — only skip a month if EVERY ticker is NaN,
+    # not when just one ticker is missing (old behaviour).
+    rebalance_dates = momentum.dropna(how="all").index
 
     for date in rebalance_dates:
         try:
-            past_returns = momentum.loc[date].drop("SPY")
+            # Rank only tickers that have a score this month
+            past_returns = momentum.loc[date].drop("SPY").dropna()
+            if len(past_returns) < top_n:
+                continue  # not enough ranked tickers to fill the portfolio
+
             top_names = past_returns.nlargest(top_n)
             entry_prices = monthly_prices.loc[date, top_names.index]
 
@@ -217,7 +235,6 @@ def run_cross_sectional():
     rolling_sharpe = ((returns.rolling(window=12).mean() - risk_free_rate) /
                       returns.rolling(window=12).std()) * np.sqrt(12)
     st.line_chart(rolling_sharpe)
-
 
 # ============================================================
 #  Dual Momentum (helpers + UI in the expander body)
