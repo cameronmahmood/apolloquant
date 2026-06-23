@@ -16,6 +16,7 @@ import correlation_matrix as cm
 import stress_testing as st_test
 import factor_model as fm
 import portfolio_optimizer as po
+import performance_dashboard as pd_dash
 
 CAMLINK = "https://www.linkedin.com/in/cameron-mahmood-86334628a"
 GITHUBLINK = "https://github.com/cameronmahmood"
@@ -182,5 +183,4 @@ elif page == "Risk & Portfolio":
 # PERFORMANCE
 # ─────────────────────────────────────────
 elif page == "Performance":
-    st.header("📊 Trading Performance")
-    st.info("🔧 Trading Performance Dashboard — Coming Soon")
+    pd_dash.run_performance_dashboard()
