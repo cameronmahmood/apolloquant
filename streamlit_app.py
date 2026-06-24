@@ -41,37 +41,102 @@ page = st.sidebar.radio("Go to", [
 if page == "Home":
     st.markdown(LOGO_SVG, unsafe_allow_html=True)
     st.markdown("---")
-    st.markdown("A live quantitative finance dashboard built in Python by **Cameron Mahmood**. Use the sidebar to navigate between sections.")
+    st.markdown(
+        "A live quantitative finance research and paper-trading analytics platform "
+        "built in Python by **Cameron Mahmood**. Use the sidebar to navigate."
+    )
     st.info("💡 If the app is loading slowly, it may be warming up from sleep mode. Please allow 30–60 seconds on first visit.")
 
+    # ---- 6-Step Workflow ----
+    st.markdown("---")
+    st.subheader("🗺️ Apollo Quant Workflow")
+    st.markdown("Use these six steps in order before every Investopedia paper trade:")
+
+    steps = [
+        ("1️⃣", "Check Market Regime", "Is the environment Risk-On, Risk-Off, Inflationary, or Recessionary?", "Research & Macro → Market Regime Classifier"),
+        ("2️⃣", "Find Leaders", "Which assets and sectors have the strongest momentum right now?", "Trading Tools → Relative Strength Scanner + Cross-Sectional Momentum"),
+        ("3️⃣", "Time Your Entry", "Is the asset oversold? Confirm with MACD and Mean Reversion.", "Trading Tools → Mean Reversion Scanner + MACD & Technical Signals"),
+        ("4️⃣", "Check the Macro", "Is the bull or bear case supported by rates, oil, and the dollar?", "Research & Macro → Macro Research + Yield Curve + Fear & Greed"),
+        ("5️⃣", "Assess Risk", "What is your VaR? How correlated are your holdings?", "Risk & Portfolio → VaR Calculator + Correlation Matrix"),
+        ("6️⃣", "Log the Trade", "Record your thesis, entry price, and tools used. Track vs SPY.", "Performance → Trading Performance Dashboard"),
+    ]
+
+    for icon, title, desc, tool in steps:
+        st.markdown(
+            f"""<div style="border-left:4px solid #f0b429;padding:10px 16px;margin-bottom:8px;
+            background:#f0b42908;border-radius:0 6px 6px 0;">
+            <span style="font-size:1.1rem;font-weight:700;color:#f0b429;">{icon} {title}</span><br>
+            <span style="color:#ccc;font-size:0.88rem;">{desc}</span><br>
+            <span style="color:#888;font-size:0.8rem;">📍 {tool}</span>
+            </div>""",
+            unsafe_allow_html=True
+        )
+
+    # ---- Feature Cards ----
     st.markdown("---")
     st.subheader("📂 What's Inside")
 
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("""
-**⚙️ Trading Tools**
-Options pricing (Black-Scholes, Monte Carlo, Implied Move), momentum strategies (Cross-Sectional, Dual Momentum), mean reversion scanner (RSI, Bollinger Bands, Z-Score), MACD & technical signals, pairs trading, and relative strength scanner.
-
-**🌍 Research & Macro**
-Original cross-asset macro research with live price feeds, AI-driven market regime classifier, yield curve visualizer, sector rotation heatmap, economic calendar, and Fear & Greed index.
-""")
+        st.markdown(
+            """<div style="border:1px solid #f0b42944;border-radius:8px;padding:16px;margin-bottom:12px;">
+            <div style="font-size:1rem;font-weight:700;color:#f0b429;">⚙️ Trading Signals</div>
+            <div style="color:#ccc;font-size:0.85rem;margin-top:6px;">
+            Momentum (Cross-Sectional, Dual), Relative Strength Scanner, Mean Reversion (RSI, Bollinger, Z-Score),
+            MACD & Technical Signals, Pairs Trading with cointegration testing.
+            </div></div>""",
+            unsafe_allow_html=True
+        )
+        st.markdown(
+            """<div style="border:1px solid #3498db44;border-radius:8px;padding:16px;margin-bottom:12px;">
+            <div style="font-size:1rem;font-weight:700;color:#3498db;">🌍 Macro Research</div>
+            <div style="color:#ccc;font-size:0.85rem;margin-top:6px;">
+            AI Market Regime Classifier, cross-asset macro outlook, live yield curve,
+            sector rotation heatmap, economic calendar, and Fear & Greed Index.
+            </div></div>""",
+            unsafe_allow_html=True
+        )
     with col2:
-        st.markdown("""
-**🛡️ Risk & Portfolio**
-Value at Risk (VaR) calculator, correlation matrix, stress testing across historical crisis scenarios, Fama-French factor model, and portfolio optimizer with efficient frontier.
+        st.markdown(
+            """<div style="border:1px solid #2ecc7144;border-radius:8px;padding:16px;margin-bottom:12px;">
+            <div style="font-size:1rem;font-weight:700;color:#2ecc71;">🛡️ Portfolio Risk</div>
+            <div style="color:#ccc;font-size:0.85rem;margin-top:6px;">
+            Value at Risk (3 methods), stress testing across 8 historical crises,
+            correlation matrix, Fama-French factor model, and Markowitz portfolio optimizer.
+            </div></div>""",
+            unsafe_allow_html=True
+        )
+        st.markdown(
+            """<div style="border:1px solid #9b59b644;border-radius:8px;padding:16px;margin-bottom:12px;">
+            <div style="font-size:1rem;font-weight:700;color:#9b59b6;">📊 Performance Tracking</div>
+            <div style="color:#ccc;font-size:0.85rem;margin-top:6px;">
+            Paper trade journal with thesis logging, live P&L vs S&P 500 benchmark,
+            Sharpe ratio, win rate, sector attribution, and CSV export.
+            </div></div>""",
+            unsafe_allow_html=True
+        )
 
-**📊 Performance**
-Quantitative trading performance dashboard tracking paper trades vs S&P 500 benchmark with Sharpe ratio, win rate, sector attribution, and trade journal with reasoning.
-""")
-
+    # ---- Built With ----
     st.markdown("---")
     st.subheader("🛠️ Built With")
-    st.markdown("Python · Streamlit · pandas · NumPy · SciPy · yfinance · matplotlib · seaborn · scikit-learn")
+    st.markdown(
+        "Python · Streamlit · pandas · NumPy · SciPy · yfinance · "
+        "matplotlib · seaborn · statsmodels · scikit-learn"
+    )
 
+    # ---- Connect ----
     st.markdown("---")
     st.subheader("🔗 Connect")
-    st.markdown(f"- **Cameron Mahmood** — [LinkedIn]({CAMLINK}) | [GitHub]({GITHUBLINK})\n- **Providence College** — B.A. Quantitative Finance, Expected May 2027")
+    st.markdown(
+        f"- **Cameron Mahmood** — [LinkedIn]({CAMLINK}) | [GitHub]({GITHUBLINK})\n"
+        f"- **Providence College** — B.A. Quantitative Finance, Expected May 2027\n"
+        f"- **Bally's Casino** — Finance Intern, June 2026–Present"
+    )
+
+    st.caption(
+        "⚠️ Disclaimer: Apollo Quant is for educational research and paper-trading only. "
+        "It is not investment advice. All data via Yahoo Finance."
+    )
     st.caption("Last updated: June 2026 | apolloquant.streamlit.app")
 
 # ─────────────────────────────────────────
@@ -90,9 +155,9 @@ elif page == "Trading Tools":
 
     if tool == "Option Pricing & Derivatives":
         st.markdown("## 📈 Option Pricing & Derivatives")
-        with st.expander("📊 Black-Scholes & Binomial Tree Model", expanded=True):
+        with st.expander("📊 Black-Scholes Option Pricer", expanded=True):
             op.run_black_scholes()
-        with st.expander("🎲 Monte Carlo Simulation for Option Pricing", expanded=False):
+        with st.expander("🎲 Monte Carlo Simulation", expanded=False):
             op.run_monte_carlo()
         with st.expander("📈 Market-Implied Move (from ATM IV)", expanded=True):
             if hasattr(op, "run_implied_move"):
@@ -102,7 +167,7 @@ elif page == "Trading Tools":
 
     elif tool == "Momentum Strategies":
         st.markdown("## 💡 Momentum Strategies")
-        with st.expander("📘 Cross-Sectional Momentum Across Sectors", expanded=True):
+        with st.expander("📘 Cross-Sectional Momentum", expanded=True):
             mp.run_cross_sectional()
         with st.expander("📊 Dual Momentum Strategy", expanded=False):
             mp.run_dual_momentum()
@@ -135,19 +200,14 @@ elif page == "Research & Macro":
 
     if tool == "Macro Research":
         mrp.run_macro_research()
-
     elif tool == "Market Regime Classifier":
         rc.run_regime_classifier()
-
     elif tool == "Yield Curve Visualizer":
         yc.run_yield_curve()
-
     elif tool == "Sector Rotation Heatmap":
         sr.run_sector_rotation()
-
     elif tool == "Economic Calendar":
         ec.run_economic_calendar()
-
     elif tool == "Fear & Greed Index":
         fg.run_fear_greed()
 
@@ -166,16 +226,12 @@ elif page == "Risk & Portfolio":
 
     if tool == "VaR Calculator":
         vc.run_var_calculator()
-
     elif tool == "Correlation Matrix":
         cm.run_correlation_matrix()
-
     elif tool == "Stress Testing":
         st_test.run_stress_testing()
-
     elif tool == "Factor Model (Fama-French)":
         fm.run_factor_model()
-
     elif tool == "Portfolio Optimizer":
         po.run_portfolio_optimizer()
 
