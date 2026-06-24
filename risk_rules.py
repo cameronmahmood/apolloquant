@@ -6,7 +6,7 @@ import numpy as np
 from datetime import datetime, timezone
 
 def run_risk_rules():
-    st.subheader("📜 Risk Rules & Strategy Guide")
+    st.subheader("Risk Rules & Strategy Guide")
     st.markdown(
         "Apollo Quant's trading rules. These govern every paper trade on Investopedia. "
         "Discipline without rules is just gambling."
