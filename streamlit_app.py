@@ -139,20 +139,20 @@ if page == "Home":
 # ─────────────────────────────────────────
 # TRADE DECISION
 # ─────────────────────────────────────────
-elif page == "Trade Decision":
+elif page == "🎯 Trade Decision":
     td.run_trade_decision()
 
 # ─────────────────────────────────────────
 # WATCHLIST
 # ─────────────────────────────────────────
-elif page == "Watchlist":
+elif page == "📋 Watchlist":
     wl.run_watchlist()
 
 # ─────────────────────────────────────────
 # TRADING TOOLS
 # ─────────────────────────────────────────
 elif page == "Trading Tools":
-    st.header("Trading Tools")
+    st.header("⚙️ Trading Tools")
     tool = st.selectbox("Choose a tool:", [
         "Option Pricing & Derivatives",
         "Momentum Strategies",
