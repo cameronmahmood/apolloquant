@@ -33,9 +33,47 @@ def run_cross_sectional():
     transaction_cost = 0.002
     risk_free_rate = 0.02 / 12
 
+    # ============================================================
+#  Drop this STOCKS list into run_cross_sectional()
+#  Replaces the original 20-ticker list with 80+ tickers
+#  across all major sectors
+# ============================================================
+
     STOCKS = [
-        "AAPL","MSFT","TSLA","GOOGL","NVDA","META","AMZN","NFLX","JPM","UNH",
-        "V","MA","HD","BAC","XOM","WMT","PEP","KO","CSCO","INTC"
+        # ── Mega Cap Tech ──────────────────────────────────────
+        "AAPL", "MSFT", "NVDA", "GOOGL", "META", "AMZN", "TSLA",
+        "NFLX", "ADBE", "CRM", "ORCL", "NOW", "SNOW", "PLTR",
+
+        # ── Semiconductors ─────────────────────────────────────
+        "AMD", "INTC", "QCOM", "AVGO", "MU", "AMAT", "LRCX", "KLAC",
+
+        # ── Financials ─────────────────────────────────────────
+        "JPM", "BAC", "GS", "MS", "WFC", "BLK", "V", "MA",
+        "AXP", "SCHW", "C", "USB",
+
+        # ── Healthcare ─────────────────────────────────────────
+        "UNH", "LLY", "JNJ", "ABBV", "MRK", "PFE", "TMO", "ABT",
+        "DHR", "ISRG", "REGN", "VRTX",
+
+        # ── Consumer ───────────────────────────────────────────
+        "HD", "WMT", "COST", "TGT", "MCD", "SBUX", "NKE",
+        "PEP", "KO", "PG", "CL", "MDLZ",
+
+        # ── Energy ─────────────────────────────────────────────
+        "XOM", "CVX", "COP", "SLB", "EOG", "PSX", "VLO",
+
+        # ── Industrials ────────────────────────────────────────
+        "CAT", "DE", "BA", "HON", "UPS", "LMT", "RTX", "GE",
+
+        # ── Real Estate / Utilities ────────────────────────────
+        "AMT", "PLD", "EQIX", "NEE", "DUK", "SO",
+
+        # ── Communication ──────────────────────────────────────
+        "T", "VZ", "DIS", "CMCSA", "TMUS",
+
+        # ── ETFs as stock proxies ──────────────────────────────
+        "SPY", "QQQ", "IWM", "XLF", "XLK", "XLE", "XLV",
+        "XLI", "XLP", "XLU", "ARKK",
     ]
     COMMODITIES = {
         "📊 Broad Commodity Indexes": ["DBC", "PDBC", "COMT", "BCI"],
